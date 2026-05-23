@@ -1,0 +1,19 @@
+{
+  "name": "web-stresser-elysia",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node",
+    "start": "node dist/index.js",
+    "vercel-build": "bun run build"
+  },
+  "dependencies": {
+    "elysia": "^1.0.0",
+    "@elysiajs/vercel": "^1.0.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.0.0"
+  }
+}
