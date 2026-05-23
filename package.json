@@ -9,8 +9,7 @@
     "vercel-build": "bun run build"
   },
   "dependencies": {
-    "elysia": "^1.0.0",
-    "@elysiajs/vercel": "^1.0.0"
+    "elysia": "^1.0.0"
   },
   "devDependencies": {
     "bun-types": "latest",
