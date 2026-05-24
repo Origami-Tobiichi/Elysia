@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Elysia Engine</title>
+    <title>💀 Web Stresser Ultimate | Elysia Extreme Batch</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -41,7 +41,7 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-4xl md:text-6xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE</h1>
-            <p class="text-gray-400 text-sm mt-1">Elysia Engine · Real Traffic · All Attack Methods</p>
+            <p class="text-gray-400 text-sm mt-1">Elysia Extreme Engine · Single / Batch Attack · DoS Grade</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -51,7 +51,7 @@
     </div>
 
     <div class="grid lg:grid-cols-12 gap-6">
-        <!-- Konfigurasi Kiri -->
+        <!-- KONFIGURASI KIRI -->
         <div class="lg:col-span-5 glass p-5 space-y-4">
             <h2 class="text-xl font-bold flex items-center gap-2 border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500"></i> Attack Config</h2>
             <div><label class="block text-sm font-semibold mb-1">🎯 Target URL</label><input id="targetUrl" class="w-full p-2 rounded-xl bg-black/60 border border-red-900" value="https://httpbin.org/anything"></div>
@@ -62,8 +62,14 @@
             <div><label>📦 Custom Payload</label><textarea id="payload" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🔧 Custom Headers (JSON)</label><textarea id="customHeaders" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🍪 Cookies</label><input id="cookies" class="w-full p-2 rounded-xl bg-black/60"></div>
-            <div class="grid grid-cols-2 gap-3"><div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="200" class="w-full p-2 rounded-xl bg-black/60"></div><div><label>📊 Total Requests</label><input type="number" id="total" value="10000" class="w-full p-2 rounded-xl bg-black/60"></div></div>
-            <div class="grid grid-cols-2 gap-3"><div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div><div><label>🔄 Retry</label><input type="number" id="retry" value="0" class="w-full p-2 rounded-xl bg-black/60"></div></div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="200" class="w-full p-2 rounded-xl bg-black/60"></div>
+                <div><label>📊 Total Requests</label><input type="number" id="total" value="10000" class="w-full p-2 rounded-xl bg-black/60"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
+                <div><label>🔄 Retry</label><input type="number" id="retry" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
+            </div>
             <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
             <div class="grid grid-cols-2 gap-3">
                 <div><label>💣 Attack Type</label><select id="attackType" class="w-full p-2 rounded-xl bg-black/60">
@@ -102,15 +108,16 @@
                 <label><input type="checkbox" id="forceSuccess" class="accent-yellow-600" checked> ✅ Force Success (ignore errors)</label>
                 <button id="resetExtremeBtn" class="bg-gray-800 text-xs px-3 py-1 rounded-full hover:bg-gray-700"><i class="fas fa-undo-alt"></i> Reset Extreme</button>
             </div>
-            <div class="flex gap-3 pt-2">
-                <button id="startBtn" class="btn-extreme flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-bomb mr-2"></i> LAUNCH ATTACK</button>
+            <div class="flex gap-3 pt-2 flex-wrap">
+                <button id="startBtn" class="btn-extreme flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-bomb mr-2"></i> SINGLE ATTACK</button>
+                <button id="batchBtn" class="bg-purple-700 hover:bg-purple-600 flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-rocket mr-2"></i> BATCH ATTACK</button>
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-3 rounded-xl disabled:opacity-50" disabled><i class="fas fa-stop"></i> STOP</button>
             </div>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded-xl text-sm"><i class="fas fa-download"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Attacks from Vercel IPs. Only for your own servers.</div>
+            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Batch Attack = massive parallel from backend. Use only on your own servers.</div>
         </div>
 
-        <!-- Panel Kanan (Statistik + Preview + Respon) -->
+        <!-- PANEL KANAN (STATISTIK) -->
         <div class="lg:col-span-7 space-y-5">
             <div class="glass p-4">
                 <div class="flex flex-wrap justify-between items-center gap-2">
