@@ -55,7 +55,6 @@ async function executeAttack(params: AttackParams): Promise<any> {
   let finalBody = body || '';
   let useBody = false;
 
-  // Random delay sebelum request
   if (randomDelay > 0) {
     await new Promise(r => setTimeout(r, Math.random() * randomDelay));
   }
@@ -91,7 +90,6 @@ async function executeAttack(params: AttackParams): Promise<any> {
       useBody = true;
   }
 
-  // Jika amplification besar dan method GET/HEAD, ubah ke POST
   if (amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -160,6 +158,12 @@ async function executeAttack(params: AttackParams): Promise<any> {
 
 // ======================== Elysia Server ========================
 export const app = new Elysia()
+  // Global error handler → selalu kembalikan JSON
+  .onError(({ error, set }) => {
+    set.status = 500;
+    console.error(error);
+    return { success: false, error: error.message, durationMs: 0, statusCode: 0, responseSize: 0, responseBody: '' };
+  })
   .onBeforeHandle(({ request }) => {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -177,8 +181,12 @@ export const app = new Elysia()
     version: '13.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
-    const result = await executeAttack(body as AttackParams);
-    return result;
+    try {
+      const result = await executeAttack(body as AttackParams);
+      return result;
+    } catch (err: any) {
+      return { success: false, error: err.message, durationMs: 0, statusCode: 0, responseSize: 0, responseBody: '' };
+    }
   }, {
     body: t.Object({
       url: t.String(),
@@ -204,7 +212,7 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// ======================== Jalankan jika bukan di Vercel ========================
+// ======================== Jalankan lokal ========================
 if (process.env.NODE_ENV !== 'production') {
   app.listen(3000);
   console.log('🦊 Web Stresser Elysia running on http://localhost:3000');
