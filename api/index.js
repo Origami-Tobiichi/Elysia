@@ -1,19 +1,28 @@
-// api/index.js
 import { app } from '../dist/index.js';
+import { buffer } from 'node:stream/consumers';
 
-// Elysia app sudah memiliki method .handle yang sesuai dengan format Vercel
 export default async function handler(req, res) {
-  // Vercel serverless function menerima req (http.IncomingMessage) dan res (ServerResponse)
-  // Kita konversi ke format yang diharapkan Elysia
-  const response = await app.handle(new Request(req.url, {
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const host = req.headers.host;
+  const url = new URL(req.url, `${protocol}://${host}`);
+
+  let bodyBuffer = undefined;
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    bodyBuffer = await buffer(req);
+  }
+
+  const request = new Request(url.toString(), {
     method: req.method,
     headers: req.headers,
-    body: req.body,
-  }));
-  
+    body: bodyBuffer,
+  });
+
+  const response = await app.fetch(request);
+
   res.statusCode = response.status;
-  response.headers.forEach((value, key) => res.setHeader(key, value));
-  
-  const body = await response.text();
-  res.end(body);
+  for (const [key, value] of response.headers) {
+    res.setHeader(key, value);
+  }
+  const responseBody = await response.text();
+  res.end(responseBody);
 }
