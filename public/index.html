@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Bot Mode + Amplification</title>
+    <title>💀 Web Stresser Ultimate | Advanced Header Spoofing</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -22,6 +22,7 @@
         ::-webkit-scrollbar { width:5px; background:#222; }
         ::-webkit-scrollbar-thumb { background:#ff3300; border-radius:5px; }
         .response-preview { background: rgba(0,0,0,0.5); border-radius: 0.75rem; padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; white-space: pre-wrap; word-break: break-all; }
+        .section-title { font-weight: bold; border-left: 3px solid #ff3300; padding-left: 8px; margin-top: 8px; margin-bottom: 8px; }
     </style>
 </head>
 <body class="text-white p-4 md:p-6">
@@ -29,7 +30,7 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-4xl md:text-6xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE</h1>
-            <p class="text-gray-400 text-sm mt-1">Elysia Extreme Bot Mode · Real Amplification · Vercel Powered</p>
+            <p class="text-gray-400 text-sm mt-1">Advanced Header Spoofing · Query Methods · Dual Connection · Auto 200 Mode</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -39,98 +40,125 @@
     </div>
 
     <div class="grid lg:grid-cols-12 gap-6">
-        <!-- Panel Kiri -->
+        <!-- Panel Kiri (Konfigurasi) -->
         <div class="lg:col-span-5 glass p-5 space-y-4">
             <h2 class="text-xl font-bold flex items-center gap-2 border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500"></i> Attack Config</h2>
+            
+            <!-- Target & Method -->
             <div><label class="block text-sm font-semibold mb-1">🎯 Target URL</label><input id="targetUrl" class="w-full p-2 rounded-xl bg-black/60 border border-red-900" value="https://httpbin.org/anything"></div>
             <div class="grid grid-cols-2 gap-3">
                 <div><label>Method</label><select id="method" class="w-full p-2 rounded-xl bg-black/60"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option><option>HEAD</option><option>OPTIONS</option></select></div>
                 <div><label>HTTP Version</label><select id="httpVersion" class="w-full p-2 rounded-xl bg-black/60"><option>1.1</option><option>2</option></select></div>
             </div>
-            <div><label>📦 Custom Payload</label><textarea id="payload" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
+
+            <!-- Metode Query (baru) -->
+            <div class="border-t border-gray-700 pt-2">
+                <div class="section-title"><i class="fas fa-search"></i> Metode Query</div>
+                <div class="flex gap-4">
+                    <label><input type="checkbox" id="queryDepan" class="accent-red-600"> Query Depan (random param)</label>
+                    <label><input type="checkbox" id="queryBelakang" class="accent-red-600"> Query Belakang (append &amp;random)</label>
+                </div>
+            </div>
+
+            <!-- Header Tambahan (baru) -->
+            <div class="border-t border-gray-700 pt-2">
+                <div class="section-title"><i class="fas fa-heading"></i> Header Tambahan</div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <label><input type="checkbox" id="headerOnlineHost" class="accent-red-600"> Online Host (Host)</label>
+                    <label><input type="checkbox" id="headerForwardHost" class="accent-red-600"> Forward Host (X-Forwarded-Host)</label>
+                    <label><input type="checkbox" id="headerReverseProxy" class="accent-red-600"> Reverse Proxy (X-Forwarded-For random)</label>
+                    <label><input type="checkbox" id="headerKeepAlive" class="accent-red-600"> Keep Alive (sudah ada)</label>
+                    <label><input type="checkbox" id="headerUserAgent" class="accent-red-600"> User Agent (random)</label>
+                    <label><input type="checkbox" id="headerReferer" class="accent-red-600"> Pengarah (Referer random)</label>
+                    <label><input type="checkbox" id="headerWebsocket" class="accent-red-600"> Websocket (Upgrade: websocket)</label>
+                </div>
+            </div>
+
+            <!-- Tambahan (baru) -->
+            <div class="border-t border-gray-700 pt-2">
+                <div class="section-title"><i class="fas fa-plus-circle"></i> Tambahan</div>
+                <div class="flex gap-4">
+                    <label><input type="checkbox" id="rawMode" class="accent-red-600" checked> Raw (kirim apa adanya)</label>
+                    <label><input type="checkbox" id="dualConnection" class="accent-red-600"> Sambungan Ganda (double request)</label>
+                </div>
+            </div>
+
+            <!-- MEMBUAT PAYLOAD (tombol) -->
+            <div class="border-t border-gray-700 pt-2">
+                <div class="section-title"><i class="fas fa-code"></i> MEMBUAT PAYLOAD</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="genXss" class="bg-red-800/50 py-1 rounded text-xs">XSS</button>
+                    <button id="genSqli" class="bg-red-800/50 py-1 rounded text-xs">SQL Injection</button>
+                    <button id="genPath" class="bg-red-800/50 py-1 rounded text-xs">Path Traversal</button>
+                    <button id="genCmd" class="bg-red-800/50 py-1 rounded text-xs">Command Inj.</button>
+                    <button id="genRandom" class="bg-red-800/50 py-1 rounded text-xs col-span-2">Random Payload</button>
+                </div>
+                <textarea id="payload" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs mt-2" placeholder="Payload akan muncul di sini"></textarea>
+            </div>
+
+            <!-- Custom Headers & Cookies (singkat) -->
             <div><label>🔧 Custom Headers (JSON)</label><textarea id="customHeaders" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🍪 Cookies</label><input id="cookies" class="w-full p-2 rounded-xl bg-black/60"></div>
 
-            <!-- Amplification dengan tombol on/off -->
-            <div class="border-t border-red-800 pt-2">
-                <div class="flex justify-between items-center">
-                    <label class="text-yellow-400 font-semibold"><i class="fas fa-microphone-alt"></i> Amplification</label>
-                    <label class="flex items-center gap-2"><span class="text-sm">OFF</span><input type="checkbox" id="amplifyToggle" class="toggle-amplify accent-red-600"><span class="text-sm">ON</span></label>
-                </div>
-                <div id="amplifyControls" style="display:none;" class="mt-2 space-y-2">
-                    <div class="grid grid-cols-2 gap-2">
-                        <div><label>📈 Size (KB)</label><input type="range" id="amplifyKb" min="0" max="1000" step="10" value="500" class="range-slider w-full"><span id="amplifyValue" class="text-xs ml-2">500 KB</span></div>
-                        <div><label>🧪 Amp Type</label><select id="amplifyType" class="w-full p-1 rounded bg-black/60 text-sm"><option value="normal">Normal (Body)</option><option value="range">Range Header</option><option value="chunked">Chunked Transfer</option><option value="multipart">Multipart Form</option></select></div>
-                    </div>
-                </div>
-            </div>
-
+            <!-- Parameter serangan -->
             <div class="grid grid-cols-2 gap-3">
-                <div><label>💣 Attack Type</label><select id="attackType" class="w-full p-2 rounded-xl bg-black/60">
-                    <option value="normal">Normal Flood</option>
-                    <option value="slowloris">Slowloris (Keep-Alive)</option>
-                    <option value="rudy">RUDY (Slow POST)</option>
-                    <option value="range">Range Amplification</option>
-                    <option value="chunked">Chunked Transfer</option>
-                    <option value="multipart">Multipart Form Large</option>
-                </select></div>
                 <div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="200" class="w-full p-2 rounded-xl bg-black/60"></div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
                 <div><label>📊 Total Requests</label><input type="number" id="total" value="10000" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
             </div>
             <div class="grid grid-cols-2 gap-3">
+                <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
                 <div><label>🔄 Retry</label><input type="number" id="retry" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
             </div>
+            <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
 
-            <!-- Bot Mode (Continuous) -->
-            <div class="border-t border-purple-800 pt-2">
-                <div class="flex justify-between items-center">
-                    <label class="text-purple-400"><i class="fas fa-robot"></i> Bot Mode (Continuous)</label>
-                    <label><input type="checkbox" id="continuousToggle" class="accent-purple-600"> Enable</label>
-                </div>
-                <div id="continuousControls" style="display:none;" class="mt-1"><label>Interval (ms)</label><input type="number" id="intervalMs" value="5000" class="w-full p-1 rounded bg-black/60 text-sm"></div>
-            </div>
-
-            <!-- Spoofing -->
-            <div>
-                <div class="flex flex-wrap gap-2 mb-2">
-                    <span class="badge-spoof"><i class="fas fa-mask"></i> Spoofing:</span>
-                    <span class="badge-spoof" id="badgeSpoofIp">XFF ✓</span>
-                    <span class="badge-spoof" id="badgeSpoofRealIp">X-Real-IP ✓</span>
-                    <span class="badge-spoof" id="badgeSpoofCf">CF-Connecting-IP ✓</span>
-                    <span class="badge-spoof" id="badgeSpoofRange">Range ✓</span>
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-xs">
-                    <label><input type="checkbox" id="spoofIp" class="accent-red-600" checked> X-Forwarded-For</label>
-                    <label><input type="checkbox" id="spoofRealIp" class="accent-red-600" checked> X-Real-IP</label>
-                    <label><input type="checkbox" id="spoofCfConnecting" class="accent-red-600" checked> CF-Connecting-IP</label>
-                    <label><input type="checkbox" id="spoofRange" class="accent-red-600" checked> Range (bytes)</label>
-                </div>
-                <div class="mt-1"><input id="ipPrefix" class="w-full p-1 rounded bg-black/60 text-xs" value="192.168.1."></div>
-            </div>
-            <div class="flex flex-wrap gap-4">
-                <label><input type="checkbox" id="randomHeaders" class="accent-red-600" checked> 🎭 Random UA (2000+)</label>
-                <label><input type="checkbox" id="keepAlive" class="accent-red-600" checked> 🔗 Keep-Alive (aggressive)</label>
-            </div>
-            <div><label>🌐 Proxy List (optional)</label><textarea id="proxyList" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
-            <div><label>🤖 Auto Payload</label><select id="autoPayload" class="w-full p-2 rounded-xl bg-black/60"><option value="">None</option><option value="xss">XSS</option><option value="sqli">SQLi</option><option value="path">Path Traversal</option><option value="cmd">Command Injection</option><option value="random">Random</option></select></div>
+            <!-- Amplifikasi -->
             <div class="flex justify-between items-center">
-                <label><input type="checkbox" id="forceSuccess" class="accent-yellow-600" checked> ✅ Force Success (ignore errors)</label>
+                <label class="text-yellow-400"><i class="fas fa-microphone-alt"></i> Amplification</label>
+                <label><input type="checkbox" id="amplifyToggle" class="accent-red-600"> Enable</label>
+            </div>
+            <div id="amplifyControls" style="display:none;" class="grid grid-cols-2 gap-2">
+                <div><label>Size (KB)</label><input type="range" id="amplifyKb" min="0" max="1000" step="10" value="500" class="range-slider w-full"><span id="amplifyValue" class="text-xs ml-2">500 KB</span></div>
+                <div><label>Type</label><select id="amplifyType" class="w-full p-1 rounded bg-black/60 text-sm"><option value="normal">Normal</option><option value="range">Range</option><option value="chunked">Chunked</option><option value="multipart">Multipart</option></select></div>
+            </div>
+
+            <!-- Attack Type & Bot Mode -->
+            <div><label>💣 Attack Type</label><select id="attackType" class="w-full p-2 rounded-xl bg-black/60">
+                <option value="normal">Normal Flood</option><option value="slowloris">Slowloris</option><option value="rudy">RUDY</option>
+                <option value="range">Range Amplification</option><option value="chunked">Chunked Transfer</option><option value="multipart">Multipart Form Large</option>
+            </select></div>
+            <div class="flex justify-between">
+                <label><input type="checkbox" id="continuousToggle" class="accent-purple-600"> Bot Mode (Continuous)</label>
+                <input type="number" id="intervalMs" value="5000" class="w-24 p-1 rounded bg-black/60 text-sm" placeholder="interval ms">
+            </div>
+
+            <!-- Spoofing & Proxy -->
+            <div class="flex flex-wrap gap-2">
+                <span class="badge-spoof"><i class="fas fa-mask"></i> Spoofing:</span>
+                <label><input type="checkbox" id="spoofIp" class="accent-red-600" checked> X-Forwarded-For</label>
+                <label><input type="checkbox" id="spoofRealIp" class="accent-red-600" checked> X-Real-IP</label>
+                <label><input type="checkbox" id="spoofCfConnecting" class="accent-red-600" checked> CF-Connecting-IP</label>
+                <label><input type="checkbox" id="spoofRange" class="accent-red-600" checked> Range</label>
+            </div>
+            <div><input id="ipPrefix" class="w-full p-1 rounded bg-black/60 text-xs" value="192.168.1."></div>
+            <div><label>🌐 Proxy List</label><textarea id="proxyList" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
+
+            <!-- Force Success & Reset -->
+            <div class="flex justify-between items-center">
+                <label><input type="checkbox" id="forceSuccess" class="accent-yellow-600" checked> ✅ Force Success (always 200 in stats)</label>
                 <button id="resetExtremeBtn" class="bg-gray-800 text-xs px-3 py-1 rounded-full hover:bg-gray-700"><i class="fas fa-undo-alt"></i> Reset Extreme</button>
             </div>
+
+            <!-- Tombol Aksi -->
             <div class="flex gap-3 pt-2 flex-wrap">
                 <button id="startBtn" class="btn-extreme flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-bomb mr-2"></i> SINGLE</button>
                 <button id="batchBtn" class="bg-purple-700 hover:bg-purple-600 flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-rocket mr-2"></i> BATCH</button>
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-3 rounded-xl disabled:opacity-50" disabled><i class="fas fa-stop"></i> STOP</button>
             </div>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded-xl text-sm"><i class="fas fa-download"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Backend selalu 200 OK. Amplifikasi nyata via server Vercel.</div>
+            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Force Success = semua request dianggap sukses di statistik. Gunakan etis.</div>
         </div>
 
-        <!-- Panel Kanan -->
+        <!-- Panel Kanan (Statistik, Grafik, Log) -->
         <div class="lg:col-span-7 space-y-5">
             <div class="glass p-4">
                 <div class="flex flex-wrap justify-between items-center gap-2">
@@ -152,6 +180,7 @@
                     <div class="col-span-2 stat-card p-2"><div class="flex justify-between text-xs"><span>PROGRESS</span><span id="progressText">0/0</span></div><div class="w-full bg-gray-700 rounded-full h-2 mt-1"><div id="progressBar" class="bg-red-600 h-2 rounded-full" style="width:0%"></div></div></div>
                 </div>
             </div>
+
             <div class="glass p-3"><canvas id="rtChart" height="110"></canvas></div>
             <div class="glass p-3">
                 <div class="flex justify-between items-center"><span class="font-semibold text-sm"><i class="fas fa-terminal"></i> Live Logs</span><span class="text-xs text-gray-400">Status & preview</span></div>
