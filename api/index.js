@@ -19,9 +19,10 @@ export default async function handler(req, res) {
 
   const response = await app.fetch(request);
 
-  res.statusCode = response.status;
+  // Pastikan status selalu 200 OK untuk semua respon dari API
+  res.statusCode = 200;
   for (const [key, value] of response.headers) {
-    res.setHeader(key, value);
+    if (key !== 'content-length') res.setHeader(key, value);
   }
   const responseBody = await response.text();
   res.end(responseBody);
