@@ -3,36 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Elysia Extreme Batch</title>
+    <title>💀 Web Stresser Ultimate | Bot Mode + Amplification</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
-        body {
-            background: radial-gradient(circle at 20% 30%, #0a0f1e, #000000);
-            font-family: 'Inter', system-ui, monospace;
-        }
-        .glass {
-            backdrop-filter: blur(16px);
-            background: rgba(10, 20, 40, 0.7);
-            border: 1px solid rgba(255, 51, 0, 0.4);
-            border-radius: 1.75rem;
-            transition: 0.2s;
-        }
-        .glass:hover { border-color: rgba(255, 51, 0, 0.8); box-shadow: 0 0 15px rgba(255,51,0,0.2); }
-        .btn-extreme {
-            background: linear-gradient(95deg, #ff3300, #aa0000);
-            transition: 0.2s;
-        }
-        .btn-extreme:hover { transform: scale(1.02); box-shadow: 0 0 20px #ff3300; }
-        .stat-card { background: rgba(0,0,0,0.6); border-radius: 1.25rem; backdrop-filter: blur(4px); }
-        .badge-spoof { background: #ff330022; border-radius: 20px; padding: 2px 8px; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 4px; }
-        .range-slider { -webkit-appearance: none; background: #2d2d2d; height: 4px; border-radius: 2px; }
-        .range-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #ff3300; cursor: pointer; }
-        .health-online { background-color: #22c55e; box-shadow: 0 0 5px #22c55e; }
-        .health-offline { background-color: #ef4444; }
-        ::-webkit-scrollbar { width: 5px; background: #222; }
-        ::-webkit-scrollbar-thumb { background: #ff3300; border-radius: 5px; }
+        body { background: radial-gradient(circle at 20% 30%, #0a0f1e, #000000); font-family: 'Inter', system-ui, monospace; }
+        .glass { backdrop-filter: blur(16px); background: rgba(10,20,40,0.7); border: 1px solid rgba(255,51,0,0.4); border-radius: 1.75rem; transition:0.2s; }
+        .glass:hover { border-color: rgba(255,51,0,0.8); box-shadow:0 0 15px rgba(255,51,0,0.2); }
+        .btn-extreme { background: linear-gradient(95deg,#ff3300,#aa0000); transition:0.2s; }
+        .btn-extreme:hover { transform:scale(1.02); box-shadow:0 0 20px #ff3300; }
+        .stat-card { background: rgba(0,0,0,0.6); border-radius:1.25rem; backdrop-filter:blur(4px); }
+        .badge-spoof { background:#ff330022; border-radius:20px; padding:2px 8px; font-size:0.7rem; display:inline-flex; align-items:center; gap:4px; }
+        .range-slider { -webkit-appearance:none; background:#2d2d2d; height:4px; border-radius:2px; }
+        .range-slider::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#ff3300; cursor:pointer; }
+        .health-online { background-color:#22c55e; box-shadow:0 0 5px #22c55e; }
+        .health-offline { background-color:#ef4444; }
+        ::-webkit-scrollbar { width:5px; background:#222; }
+        ::-webkit-scrollbar-thumb { background:#ff3300; border-radius:5px; }
         .response-preview { background: rgba(0,0,0,0.5); border-radius: 0.75rem; padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; white-space: pre-wrap; word-break: break-all; }
     </style>
 </head>
@@ -41,7 +29,7 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-4xl md:text-6xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE</h1>
-            <p class="text-gray-400 text-sm mt-1">Elysia Extreme Engine · Single / Batch Attack · DoS Grade</p>
+            <p class="text-gray-400 text-sm mt-1">Elysia Extreme Bot Mode · Real Amplification · Vercel Powered</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -51,7 +39,7 @@
     </div>
 
     <div class="grid lg:grid-cols-12 gap-6">
-        <!-- KONFIGURASI KIRI -->
+        <!-- Panel Kiri -->
         <div class="lg:col-span-5 glass p-5 space-y-4">
             <h2 class="text-xl font-bold flex items-center gap-2 border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500"></i> Attack Config</h2>
             <div><label class="block text-sm font-semibold mb-1">🎯 Target URL</label><input id="targetUrl" class="w-full p-2 rounded-xl bg-black/60 border border-red-900" value="https://httpbin.org/anything"></div>
@@ -62,15 +50,21 @@
             <div><label>📦 Custom Payload</label><textarea id="payload" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🔧 Custom Headers (JSON)</label><textarea id="customHeaders" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🍪 Cookies</label><input id="cookies" class="w-full p-2 rounded-xl bg-black/60"></div>
-            <div class="grid grid-cols-2 gap-3">
-                <div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="200" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label>📊 Total Requests</label><input type="number" id="total" value="10000" class="w-full p-2 rounded-xl bg-black/60"></div>
+
+            <!-- Amplification dengan tombol on/off -->
+            <div class="border-t border-red-800 pt-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-yellow-400 font-semibold"><i class="fas fa-microphone-alt"></i> Amplification</label>
+                    <label class="flex items-center gap-2"><span class="text-sm">OFF</span><input type="checkbox" id="amplifyToggle" class="toggle-amplify accent-red-600"><span class="text-sm">ON</span></label>
+                </div>
+                <div id="amplifyControls" style="display:none;" class="mt-2 space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label>📈 Size (KB)</label><input type="range" id="amplifyKb" min="0" max="1000" step="10" value="500" class="range-slider w-full"><span id="amplifyValue" class="text-xs ml-2">500 KB</span></div>
+                        <div><label>🧪 Amp Type</label><select id="amplifyType" class="w-full p-1 rounded bg-black/60 text-sm"><option value="normal">Normal (Body)</option><option value="range">Range Header</option><option value="chunked">Chunked Transfer</option><option value="multipart">Multipart Form</option></select></div>
+                    </div>
+                </div>
             </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label>🔄 Retry</label><input type="number" id="retry" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
-            </div>
-            <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
+
             <div class="grid grid-cols-2 gap-3">
                 <div><label>💣 Attack Type</label><select id="attackType" class="w-full p-2 rounded-xl bg-black/60">
                     <option value="normal">Normal Flood</option>
@@ -80,8 +74,27 @@
                     <option value="chunked">Chunked Transfer</option>
                     <option value="multipart">Multipart Form Large</option>
                 </select></div>
-                <div><label>📈 Amplification (KB)</label><input type="range" id="amplifyKb" min="0" max="1000" step="10" value="500" class="range-slider w-full"><span id="amplifyValue" class="text-xs ml-2">500 KB</span></div>
+                <div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="200" class="w-full p-2 rounded-xl bg-black/60"></div>
             </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label>📊 Total Requests</label><input type="number" id="total" value="10000" class="w-full p-2 rounded-xl bg-black/60"></div>
+                <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label>🔄 Retry</label><input type="number" id="retry" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
+                <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
+            </div>
+
+            <!-- Bot Mode (Continuous) -->
+            <div class="border-t border-purple-800 pt-2">
+                <div class="flex justify-between items-center">
+                    <label class="text-purple-400"><i class="fas fa-robot"></i> Bot Mode (Continuous)</label>
+                    <label><input type="checkbox" id="continuousToggle" class="accent-purple-600"> Enable</label>
+                </div>
+                <div id="continuousControls" style="display:none;" class="mt-1"><label>Interval (ms)</label><input type="number" id="intervalMs" value="5000" class="w-full p-1 rounded bg-black/60 text-sm"></div>
+            </div>
+
+            <!-- Spoofing -->
             <div>
                 <div class="flex flex-wrap gap-2 mb-2">
                     <span class="badge-spoof"><i class="fas fa-mask"></i> Spoofing:</span>
@@ -102,22 +115,22 @@
                 <label><input type="checkbox" id="randomHeaders" class="accent-red-600" checked> 🎭 Random UA (2000+)</label>
                 <label><input type="checkbox" id="keepAlive" class="accent-red-600" checked> 🔗 Keep-Alive (aggressive)</label>
             </div>
-            <div><label>🌐 Proxy List (optional)</label><textarea id="proxyList" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
+            <div><label>🌐 Proxy List (optional)</label><textarea id="proxyList" rows="1" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
             <div><label>🤖 Auto Payload</label><select id="autoPayload" class="w-full p-2 rounded-xl bg-black/60"><option value="">None</option><option value="xss">XSS</option><option value="sqli">SQLi</option><option value="path">Path Traversal</option><option value="cmd">Command Injection</option><option value="random">Random</option></select></div>
             <div class="flex justify-between items-center">
                 <label><input type="checkbox" id="forceSuccess" class="accent-yellow-600" checked> ✅ Force Success (ignore errors)</label>
                 <button id="resetExtremeBtn" class="bg-gray-800 text-xs px-3 py-1 rounded-full hover:bg-gray-700"><i class="fas fa-undo-alt"></i> Reset Extreme</button>
             </div>
             <div class="flex gap-3 pt-2 flex-wrap">
-                <button id="startBtn" class="btn-extreme flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-bomb mr-2"></i> SINGLE ATTACK</button>
-                <button id="batchBtn" class="bg-purple-700 hover:bg-purple-600 flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-rocket mr-2"></i> BATCH ATTACK</button>
+                <button id="startBtn" class="btn-extreme flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-bomb mr-2"></i> SINGLE</button>
+                <button id="batchBtn" class="bg-purple-700 hover:bg-purple-600 flex-1 py-3 rounded-xl font-bold text-lg"><i class="fas fa-rocket mr-2"></i> BATCH</button>
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-3 rounded-xl disabled:opacity-50" disabled><i class="fas fa-stop"></i> STOP</button>
             </div>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded-xl text-sm"><i class="fas fa-download"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Batch Attack = massive parallel from backend. Use only on your own servers.</div>
+            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Backend selalu 200 OK. Amplifikasi nyata via server Vercel.</div>
         </div>
 
-        <!-- PANEL KANAN (STATISTIK) -->
+        <!-- Panel Kanan -->
         <div class="lg:col-span-7 space-y-5">
             <div class="glass p-4">
                 <div class="flex flex-wrap justify-between items-center gap-2">
@@ -139,9 +152,7 @@
                     <div class="col-span-2 stat-card p-2"><div class="flex justify-between text-xs"><span>PROGRESS</span><span id="progressText">0/0</span></div><div class="w-full bg-gray-700 rounded-full h-2 mt-1"><div id="progressBar" class="bg-red-600 h-2 rounded-full" style="width:0%"></div></div></div>
                 </div>
             </div>
-
             <div class="glass p-3"><canvas id="rtChart" height="110"></canvas></div>
-
             <div class="glass p-3">
                 <div class="flex justify-between items-center"><span class="font-semibold text-sm"><i class="fas fa-terminal"></i> Live Logs</span><span class="text-xs text-gray-400">Status & preview</span></div>
                 <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready.</div></div>
