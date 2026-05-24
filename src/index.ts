@@ -30,6 +30,7 @@ setInterval(() => {
   }
 }, 30000);
 
+// ==================== Single Attack ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -163,6 +164,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
+// ==================== Batch Attack ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -340,12 +342,5 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// ==================== Local run (only in dev) ====================
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(3000);
-  console.log('🦊 Web Stresser Ultimate running on http://localhost:3000');
-}
-
-// ==================== Vercel entrypoint (ekspor fetch) ====================
-// Untuk Vercel, kita bisa langsung ekspor app, dan Vercel akan menggunakan .fetch
+// ==================== Ekspor untuk Vercel ====================
 export default app;
