@@ -21,14 +21,14 @@ export async function runClusterBot(url: string, options: {
           '--disable-dev-shm-usage',
           '--disable-gpu',
         ],
-        defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
         headless: true,
-        ignoreHTTPSErrors: true,
+        // acceptInsecureCerts: true, // opsional
       },
     });
 
     await cluster.task(async ({ page, data }) => {
+      await page.setViewport({ width: 1920, height: 1080 });
       await page.goto(data.url, { waitUntil: 'networkidle2', timeout: 30000 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await new Promise(resolve => setTimeout(resolve, 2000));
