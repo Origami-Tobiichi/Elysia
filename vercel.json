@@ -5,19 +5,14 @@
       "maxDuration": 10
     }
   },
-  "builds": [
-    {
-      "src": "src/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "installCommand": "npm install --no-package-lock && npm install kind-of"
-      }
-    }
-  ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "/api/index.js"
+    },
+    {
+      "src": "/script.js",
+      "dest": "/public/script.js"
     },
     {
       "src": "/(.*)",
