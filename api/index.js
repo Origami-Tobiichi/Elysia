@@ -1,11 +1,21 @@
-import * as serverModule from '../dist/index.js';
-
-// Ambil app dari berbagai kemungkinan ekspor (default, named, atau langsung)
-const app = serverModule.default || serverModule.app || serverModule;
-
-import { buffer } from 'node:stream/consumers';
-
+// Dynamic import untuk menghindari error ekspor default
 export default async function handler(req, res) {
+  const { buffer } = await import('node:stream/consumers');
+  
+  // Coba import module dengan berbagai cara
+  let app;
+  try {
+    // Coba import default
+    const module = await import('../dist/index.js');
+    app = module.default || module.app || module;
+  } catch (err) {
+    console.error('Failed to import app:', err);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: false, error: 'Failed to load app module' }));
+    return;
+  }
+
   try {
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers.host;
