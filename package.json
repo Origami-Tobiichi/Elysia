@@ -16,7 +16,7 @@
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-cluster": "^0.23.0",
-    "kind-of": "^6.0.3"
+    "kind-of": "6.0.2"
   },
   "devDependencies": {
     "bun-types": "latest",
