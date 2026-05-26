@@ -19,8 +19,7 @@ export async function runPuppeteerBot(url: string, options: {
         '--single-process',
       ],
       executablePath: await chromium.executablePath(),
-      headless: headless ? 'new' : false,
-      // acceptInsecureCerts: true, // opsional jika perlu mengabaikan error SSL
+      headless: headless, // langsung boolean, tidak pakai 'new'
     });
 
     const runPage = async () => {
