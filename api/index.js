@@ -1,18 +1,24 @@
-// Dynamic import untuk menghindari error ekspor default
+// Dynamic import untuk memastikan module tersedia
 export default async function handler(req, res) {
   const { buffer } = await import('node:stream/consumers');
   
-  // Coba import module dengan berbagai cara
+  // Import module dengan fallback
   let app;
   try {
-    // Coba import default
     const module = await import('../dist/index.js');
+    // Coba ambil default export, atau named export 'app', atau fallback ke module itu sendiri
     app = module.default || module.app || module;
+    if (!app || typeof app.fetch !== 'function') {
+      throw new Error('Module does not export a valid Elysia app');
+    }
   } catch (err) {
     console.error('Failed to import app:', err);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, error: 'Failed to load app module' }));
+    res.end(JSON.stringify({ 
+      success: false, 
+      error: `Failed to load app module: ${err.message}` 
+    }));
     return;
   }
 
