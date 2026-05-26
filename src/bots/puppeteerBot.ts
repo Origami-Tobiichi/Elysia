@@ -16,12 +16,11 @@ export async function runPuppeteerBot(url: string, options: {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--single-process', // opsi opsional untuk mengurangi resource
+        '--single-process',
       ],
-      defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
-      headless: headless ? true : false,
-      ignoreHTTPSErrors: true,
+      headless: headless ? 'new' : false,
+      // acceptInsecureCerts: true, // opsional jika perlu mengabaikan error SSL
     });
 
     const runPage = async () => {
