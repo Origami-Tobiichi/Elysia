@@ -1,39 +1,53 @@
 import { Cluster } from 'puppeteer-cluster';
+import chromium from '@sparticuz/chromium';
 
 export async function runClusterBot(url: string, options: {
   concurrency?: number;
   totalTasks?: number;
   loop?: boolean;
-}): Promise<void> {
+}): Promise<{ success: boolean; message: string }> {
   const { concurrency = 10, totalTasks = 100, loop = false } = options;
 
-  const cluster = await Cluster.launch({
-    concurrency: Cluster.CONCURRENCY_CONTEXT,
-    maxConcurrency: concurrency,
-    puppeteerOptions: {
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    },
-  });
+  try {
+    const cluster = await Cluster.launch({
+      concurrency: Cluster.CONCURRENCY_CONTEXT,
+      maxConcurrency: concurrency,
+      puppeteerOptions: {
+        args: chromium.args,
+        defaultViewport: chromium.defaultViewport,
+        executablePath: await chromium.executablePath(),
+        headless: chromium.headless,
+        ignoreHTTPSErrors: true,
+      },
+    });
 
-  await cluster.task(async ({ page, data }) => {
-    await page.goto(data.url, { waitUntil: 'networkidle2' });
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(2000);
-  });
+    await cluster.task(async ({ page, data }) => {
+      await page.goto(data.url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2000);
+    });
 
-  if (loop) {
-    while (true) {
+    if (loop) {
+      // Loop infinite di background
+      (async () => {
+        while (true) {
+          for (let i = 0; i < totalTasks; i++) {
+            cluster.queue({ url });
+          }
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
+      })();
+      return { success: true, message: `Cluster bot started with ${concurrency} workers, loop mode` };
+    } else {
       for (let i = 0; i < totalTasks; i++) {
         cluster.queue({ url });
       }
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await cluster.idle();
+      await cluster.close();
+      return { success: true, message: `Cluster bot completed ${totalTasks} tasks` };
     }
-  } else {
-    for (let i = 0; i < totalTasks; i++) {
-      cluster.queue({ url });
-    }
-    await cluster.idle();
-    await cluster.close();
+  } catch (error: any) {
+    console.error(error);
+    return { success: false, message: error.message };
   }
 }
