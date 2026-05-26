@@ -1,28 +1,17 @@
-import { createRequire } from 'node:module';
-import { buffer } from 'node:stream/consumers';
-
-const require = createRequire(import.meta.url);
-
 export default async function handler(req, res) {
   let app;
   try {
-    // Coba import ESM (hasil bundle)
     const module = await import('../dist/index.js');
     app = module.default || module.app || module;
-    if (!app || typeof app.fetch !== 'function') throw new Error('Invalid app');
-  } catch (err) {
-    console.error('ESM import failed, trying CommonJS:', err);
-    try {
-      // Fallback ke require (jika bundle menghasilkan CommonJS)
-      const module = require('../dist/index.js');
-      app = module.default || module.app || module;
-    } catch (err2) {
-      console.error('CommonJS fallback failed:', err2);
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ success: false, error: `Failed to load app: ${err2.message}` }));
-      return;
+    if (!app || typeof app.fetch !== 'function') {
+      throw new Error('Invalid app export');
     }
+  } catch (err) {
+    console.error('Failed to load app:', err);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ success: false, error: `Failed to load app: ${err.message}` }));
+    return;
   }
 
   try {
