@@ -11,13 +11,12 @@
     "undici": "^6.0.0",
     "puppeteer-core": "^22.0.0",
     "@sparticuz/chromium": "^121.0.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "puppeteer-cluster": "^0.23.0"
+}
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0",
-    "@types/puppeteer-core": "^7.0.0"
+    "@types/puppeteer-core": "^7.0.4"
   }
 }
