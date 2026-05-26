@@ -1,25 +1,28 @@
-// Dynamic import untuk memastikan module tersedia
+import { createRequire } from 'node:module';
+import { buffer } from 'node:stream/consumers';
+
+const require = createRequire(import.meta.url);
+
 export default async function handler(req, res) {
-  const { buffer } = await import('node:stream/consumers');
-  
-  // Import module dengan fallback
   let app;
   try {
+    // Coba import ESM (hasil bundle)
     const module = await import('../dist/index.js');
-    // Coba ambil default export, atau named export 'app', atau fallback ke module itu sendiri
     app = module.default || module.app || module;
-    if (!app || typeof app.fetch !== 'function') {
-      throw new Error('Module does not export a valid Elysia app');
-    }
+    if (!app || typeof app.fetch !== 'function') throw new Error('Invalid app');
   } catch (err) {
-    console.error('Failed to import app:', err);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ 
-      success: false, 
-      error: `Failed to load app module: ${err.message}` 
-    }));
-    return;
+    console.error('ESM import failed, trying CommonJS:', err);
+    try {
+      // Fallback ke require (jika bundle menghasilkan CommonJS)
+      const module = require('../dist/index.js');
+      app = module.default || module.app || module;
+    } catch (err2) {
+      console.error('CommonJS fallback failed:', err2);
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ success: false, error: `Failed to load app: ${err2.message}` }));
+      return;
+    }
   }
 
   try {
