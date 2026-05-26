@@ -1,4 +1,8 @@
-import app from '../dist/index.js';
+import * as serverModule from '../dist/index.js';
+
+// Ambil app dari berbagai kemungkinan ekspor (default, named, atau langsung)
+const app = serverModule.default || serverModule.app || serverModule;
+
 import { buffer } from 'node:stream/consumers';
 
 export default async function handler(req, res) {
