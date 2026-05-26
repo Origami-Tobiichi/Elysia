@@ -7,16 +7,14 @@
     "vercel-build": "npm run build"
   },
   "dependencies": {
-    "elysia": "^1.0.0",
-    "undici": "^6.0.0",
-    "puppeteer-core": "^22.0.0",
+    "elysia": "^1.1.0",
+    "undici": "^6.11.1",
+    "puppeteer-core": "^22.6.0",
     "@sparticuz/chromium": "^121.0.0",
     "puppeteer-cluster": "^0.23.0"
-}
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0",
-    "@types/puppeteer-core": "^7.0.4"
+    "typescript": "^5.4.2",
+    "@types/node": "^20.11.30"
   }
 }
