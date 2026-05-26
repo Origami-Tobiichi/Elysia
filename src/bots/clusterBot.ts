@@ -1,4 +1,5 @@
 import { Cluster } from 'puppeteer-cluster';
+import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
 
 export async function runClusterBot(url: string, options: {
@@ -13,10 +14,16 @@ export async function runClusterBot(url: string, options: {
       concurrency: Cluster.CONCURRENCY_CONTEXT,
       maxConcurrency: concurrency,
       puppeteerOptions: {
-        args: chromium.args,
+        args: [
+          ...chromium.args,
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+        ],
         defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
-        headless: true, // gunakan true, bukan chromium.headless yang bisa 'new'
+        headless: true,
         ignoreHTTPSErrors: true,
       },
     });
