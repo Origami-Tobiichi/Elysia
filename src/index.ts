@@ -1,8 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import { runPuppeteerBot } from './bots/puppeteerBot.js';
-import { runSeleniumBot } from './bots/seleniumBot.js';
-import { runPlaywrightBot } from './bots/playwrightBot.js';
+//import { runSeleniumBot } from './bots/seleniumBot.js';
+//import { runPlaywrightBot } from './bots/playwrightBot.js';
 import { runClusterBot } from './bots/clusterBot.js';
 
 // Optimasi koneksi HTTP
