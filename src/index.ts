@@ -1,10 +1,11 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
-import { runPuppeteerBot } from '../bots/puppeteerBot.js';
-import { runSeleniumBot } from '../bots/seleniumBot.js';
-import { runPlaywrightBot } from '../bots/playwrightBot.js';
-import { runClusterBot } from '../bots/clusterBot.js';
+import { runPuppeteerBot } from './bots/puppeteerBot.js';
+import { runSeleniumBot } from './bots/seleniumBot.js';
+import { runPlaywrightBot } from './bots/playwrightBot.js';
+import { runClusterBot } from './bots/clusterBot.js';
 
+// Optimasi koneksi HTTP
 const globalAgent = new Agent({
   connections: 5000,
   pipelining: 1,
@@ -13,6 +14,7 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
+// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -270,7 +272,6 @@ export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
     console.error(error);
-    // Perbaikan error TS2339: akses 'message' dengan aman
     const errorMessage = error instanceof Error ? error.message : String(error);
     return { success: false, error: errorMessage };
   })
