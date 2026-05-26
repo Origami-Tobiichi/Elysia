@@ -1,8 +1,5 @@
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
+import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
-
-puppeteer.use(StealthPlugin());
 
 export async function runPuppeteerBot(url: string, options: {
   loop?: boolean;
@@ -13,10 +10,17 @@ export async function runPuppeteerBot(url: string, options: {
 
   try {
     const browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--single-process', // opsi opsional untuk mengurangi resource
+      ],
       defaultViewport: chromium.defaultViewport,
       executablePath: await chromium.executablePath(),
-      headless: headless ? true : false, // pastikan boolean, bukan 'new'
+      headless: headless ? true : false,
       ignoreHTTPSErrors: true,
     });
 
@@ -28,7 +32,7 @@ export async function runPuppeteerBot(url: string, options: {
       );
       await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await new Promise(resolve => setTimeout(resolve, 2000)); // ganti waitForTimeout
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await page.close();
     };
 
