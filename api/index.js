@@ -29,8 +29,9 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     res.end(responseBody);
   } catch (err) {
+    console.error('Handler error:', err);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, error: err.message }));
+    res.end(JSON.stringify({ success: false, error: err.message || 'Internal server error' }));
   }
 }
