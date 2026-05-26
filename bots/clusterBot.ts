@@ -16,7 +16,7 @@ export async function runClusterBot(url: string, options: {
         args: chromium.args,
         defaultViewport: chromium.defaultViewport,
         executablePath: await chromium.executablePath(),
-        headless: chromium.headless,
+        headless: true, // gunakan true, bukan chromium.headless yang bisa 'new'
         ignoreHTTPSErrors: true,
       },
     });
@@ -24,11 +24,10 @@ export async function runClusterBot(url: string, options: {
     await cluster.task(async ({ page, data }) => {
       await page.goto(data.url, { waitUntil: 'networkidle2', timeout: 30000 });
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(2000);
+      await new Promise(resolve => setTimeout(resolve, 2000));
     });
 
     if (loop) {
-      // Loop infinite di background
       (async () => {
         while (true) {
           for (let i = 0; i < totalTasks; i++) {
