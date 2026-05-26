@@ -9,9 +9,9 @@
   "dependencies": {
     "elysia": "^1.1.0",
     "undici": "^6.11.1",
-    "puppeteer-core": "^22.6.0",
-    "@sparticuz/chromium": "^121.0.0",
-    "puppeteer-cluster": "^0.23.0"
+    "puppeteer-cluster": "^0.23.0",
+    "@sparticuz/chromium": "^148.0.0",
+    "puppeteer-core": "^25.0.4"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
