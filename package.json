@@ -12,10 +12,13 @@
     "autocannon": "^8.0.0",
     "artillery": "^2.0.0-31",
     "loadtest": "^4.1.0",
-    "axios": "^1.6.8"
+    "axios": "^1.6.8", 
+    "uuid": "^14.0.0",
+    "yaeti": "^1.0.3"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "@types/node": "^20.11.30"
+    "@types/node": "^20.11.30", 
+    "@types/autocannon": "^7.12.7"
   }
 }
