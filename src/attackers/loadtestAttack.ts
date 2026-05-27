@@ -12,7 +12,7 @@ interface LoadtestOptions {
 
 export async function runLoadtest(options: LoadtestOptions): Promise<any> {
   return new Promise((resolve, reject) => {
-    const testOptions: loadtest.TestOptions = {
+    const testOptions: any = {
       url: options.url,
       maxRequests: options.maxRequests,
       concurrency: options.concurrency,
@@ -22,7 +22,7 @@ export async function runLoadtest(options: LoadtestOptions): Promise<any> {
       timeout: options.timeout || 10000,
       requestsPerSecond: options.concurrency,
     };
-    loadtest.loadTest(testOptions, (error, results) => {
+    loadtest.loadTest(testOptions, (error: any, results: any) => {
       if (error) reject(error);
       else resolve(results);
     });
