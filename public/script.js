@@ -74,7 +74,7 @@ let intervalMsVal = 5000;
 let chart;
 let abortController = null;
 let isRunning = false;
-let currentAttackType = null; // 'single', 'batch', 'autocannon', 'artillery', 'loadtest', 'combined'
+let currentAttackType = null;
 let stats = {
     success: 0, fail: 0, times: [], totalBytes: 0,
     startTime: 0, total: 0
@@ -85,13 +85,13 @@ let heartbeatInterval = null;
 let lastTrafficUpdate = 0;
 let lastTotalBytes = 0;
 
-// ======================== Helper Functions ========================
+// ======================== Helper ========================
 function updateTrafficEstimator() {
     const now = Date.now();
     if (lastTrafficUpdate !== 0 && now - lastTrafficUpdate >= 1000) {
         const deltaBytes = stats.totalBytes - lastTotalBytes;
         const mbps = (deltaBytes * 8) / 1e6;
-        trafficMbpsSpan.innerText = mbps.toFixed(2);
+        if (trafficMbpsSpan) trafficMbpsSpan.innerText = mbps.toFixed(2);
         lastTotalBytes = stats.totalBytes;
         lastTrafficUpdate = now;
     } else if (lastTrafficUpdate === 0) {
@@ -153,7 +153,7 @@ function resetStats() {
     updateUI();
 }
 
-// Random helpers
+// ======================== Helper untuk request ========================
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
@@ -398,13 +398,12 @@ async function startBatchAttack() {
 function stopAttack() {
     if (isRunning && abortController) {
         abortController.abort();
-        addLog(`🛑 Attack stopped by operator (${currentAttackType})`);
+        addLog(`🛑 Attack stopped (${currentAttackType})`);
         stopBtn.disabled = true;
         startBtn.disabled = false;
         batchBtn.disabled = false;
         isRunning = false;
         currentAttackType = null;
-        // Reset statistik jika perlu? Biarkan saja
     } else {
         addLog("No attack running", true);
     }
@@ -423,18 +422,18 @@ function exportCSV() {
     addLog("CSV exported");
 }
 
-// ======================== AUTOCANNON, ARTILLERY, LOADTEST, COMBINED (dengan live status & stop) ========================
+// ======================== AUTOCANNON / ARTILLERY / LOADTEST / COMBINED ========================
 let currentToolController = null;
 let toolStatusInterval = null;
 
 function updateToolStatus(message) {
-    const statusDiv = document.getElementById('toolStatus') || (() => {
-        const div = document.createElement('div');
-        div.id = 'toolStatus';
-        div.className = 'text-xs text-yellow-400 mt-1';
-        logArea.parentNode.insertBefore(div, logArea);
-        return div;
-    })();
+    let statusDiv = document.getElementById('toolStatus');
+    if (!statusDiv) {
+        statusDiv = document.createElement('div');
+        statusDiv.id = 'toolStatus';
+        statusDiv.className = 'text-xs text-yellow-400 mt-1';
+        logArea.parentNode.insertBefore(statusDiv, logArea);
+    }
     statusDiv.innerText = message;
 }
 
@@ -443,14 +442,23 @@ async function runAttackTool(endpoint, body, toolName) {
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
     if (!url.startsWith("http")) url = "https://" + url;
+    
+    // Validasi durasi untuk Vercel (maks 10 detik)
+    let duration = body.duration || parseInt(timeoutInput.value);
+    if (duration > 10) {
+        addLog(`⚠️ Duration ${duration}s melebihi batas Vercel (10s). Akan dibatasi ke 10s.`, true);
+        body.duration = 10;
+        timeoutInput.value = 10;
+    }
+    
     body.url = url;
     body.method = method.value;
     body.headers = buildAdvancedHeaders(new URL(url).hostname);
     body.body = payload.value;
     addLog(`🚀 Memulai ${toolName} attack ke ${url}...`);
-    updateToolStatus(`${toolName} attack running... (0%)`);
+    updateToolStatus(`${toolName} running... (0%)`);
     
-    resetStats(); // clear previous stats
+    resetStats();
     isRunning = true;
     currentAttackType = toolName;
     currentToolController = new AbortController();
@@ -458,11 +466,10 @@ async function runAttackTool(endpoint, body, toolName) {
     batchBtn.disabled = true;
     stopBtn.disabled = false;
     
-    // Simulasi progress (karena tidak ada streaming progress dari server)
     let progressInterval = setInterval(() => {
         if (isRunning && currentAttackType === toolName) {
             const elapsed = (Date.now() - stats.startTime) / 1000;
-            updateToolStatus(`${toolName} attack running... ${elapsed.toFixed(1)}s elapsed`);
+            updateToolStatus(`${toolName} running... ${elapsed.toFixed(1)}s`);
         }
     }, 1000);
     
@@ -477,7 +484,6 @@ async function runAttackTool(endpoint, body, toolName) {
         if (data.success) {
             addLog(`✅ ${toolName} selesai: ${JSON.stringify(data.result).substring(0, 200)}`);
             updateToolStatus(`${toolName} completed.`);
-            // Jika ada data statistik dari hasil, bisa ditampilkan
             if (data.result && data.result.requests) {
                 stats.total = data.result.requests.total || 0;
                 stats.success = data.result.requests.completed || 0;
@@ -491,7 +497,7 @@ async function runAttackTool(endpoint, body, toolName) {
         }
     } catch (err) {
         if (err.name === 'AbortError') {
-            addLog(`🛑 ${toolName} attack stopped by user`);
+            addLog(`🛑 ${toolName} stopped by user`);
             updateToolStatus(`${toolName} stopped.`);
         } else {
             addLog(`Error: ${err.message}`, true);
@@ -505,65 +511,46 @@ async function runAttackTool(endpoint, body, toolName) {
         startBtn.disabled = false;
         batchBtn.disabled = false;
         stopBtn.disabled = true;
-        // Hapus status setelah 3 detik
         setTimeout(() => updateToolStatus(''), 3000);
     }
 }
 
-btnAutocannon.onclick = () => {
+// ======================== Event Listener (menggunakan addEventListener) ========================
+startBtn.addEventListener('click', startSingleAttack);
+batchBtn.addEventListener('click', startBatchAttack);
+stopBtn.addEventListener('click', stopAttack);
+exportBtn.addEventListener('click', exportCSV);
+
+btnAutocannon.addEventListener('click', () => {
     runAttackTool('/api/autocannon', {
         connections: parseInt(concurrencyInput.value),
         duration: parseInt(timeoutInput.value) || 10,
         amount: parseInt(totalInput.value)
     }, 'Autocannon');
-};
-btnArtillery.onclick = () => {
+});
+btnArtillery.addEventListener('click', () => {
     runAttackTool('/api/artillery', {
         duration: parseInt(timeoutInput.value) || 10,
         arrivalRate: Math.floor(parseInt(concurrencyInput.value) / 5)
     }, 'Artillery');
-};
-btnLoadtest.onclick = () => {
+});
+btnLoadtest.addEventListener('click', () => {
     runAttackTool('/api/loadtest', {
         maxRequests: parseInt(totalInput.value),
         concurrency: parseInt(concurrencyInput.value),
-        timeout: 10000
+        timeout: Math.max(parseInt(timeoutInput.value) * 1000, 1000) // minimal 1 detik
     }, 'Loadtest');
-};
-btnCombined.onclick = () => {
+});
+btnCombined.addEventListener('click', () => {
     runAttackTool('/api/combined', {
         connections: parseInt(concurrencyInput.value),
         duration: parseInt(timeoutInput.value) || 10,
         totalRequests: parseInt(totalInput.value)
     }, 'Combined');
-};
+});
 
-// ======================== HEALTH, PREVIEW, ACTIVE USERS ========================
-async function checkTargetHealth(url) {
-    try {
-        const start = performance.now();
-        await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
-        const duration = performance.now() - start;
-        responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
-        healthIndicator.className = 'health-online w-3 h-3 rounded-full';
-        healthText.innerText = 'Online';
-    } catch(e) {
-        healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
-        healthText.innerText = 'Offline';
-        responseTimeText.innerText = '';
-    }
-}
-function updatePreview(url) {
-    let pu = url; if (!pu.startsWith('http')) pu = 'https://' + pu;
-    targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
-}
-refreshPreviewBtn.onclick = () => { let u = targetUrl.value.trim(); if(u) updatePreview(u); checkTargetHealth(u); };
-function startHealthCheck() { if(healthCheckInterval) clearInterval(healthCheckInterval); healthCheckInterval = setInterval(() => { let u = targetUrl.value.trim(); if(u) checkTargetHealth(u); }, 5000); }
-async function updateActiveUsers() { try { const res = await fetch('/api/heartbeat'); const data = await res.json(); activeUsersSpan.innerText = data.active; } catch(e) {} }
-function startHeartbeat() { heartbeatInterval = setInterval(updateActiveUsers, 30000); updateActiveUsers(); }
-
-// ======================== RESET EXTREME ========================
-resetExtremeBtn.onclick = () => {
+// Reset Extreme
+resetExtremeBtn.addEventListener('click', () => {
     concurrencyInput.value = 2000;
     totalInput.value = 50000;
     timeoutInput.value = 5000;
@@ -591,9 +578,68 @@ resetExtremeBtn.onclick = () => {
     spoofRealIp.checked = true;
     spoofCfConnecting.checked = true;
     addLog("⚙️ Reset to Extreme: concurrency 2000, total 50k, amplification 500KB, spoofing on");
-};
+});
 
-// ======================== INITIALIZATION ========================
+// Amplification controls
+amplifyToggle.addEventListener('change', () => {
+    amplificationEnabled = amplifyToggle.checked;
+    amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
+});
+amplifyKb.addEventListener('input', () => {
+    amplificationKB = parseFloat(amplifyKb.value);
+    amplifyValue.innerText = amplificationKB + ' KB';
+});
+amplifyType.addEventListener('change', () => { amplificationTypeSel = amplifyType.value; });
+continuousToggle.addEventListener('change', () => { continuousMode = continuousToggle.checked; });
+intervalMsInput.addEventListener('change', () => { intervalMsVal = parseInt(intervalMsInput.value) || 5000; });
+
+// ======================== Health & Preview ========================
+async function checkTargetHealth(url) {
+    try {
+        const start = performance.now();
+        await fetch(url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
+        const duration = performance.now() - start;
+        responseTimeText.innerText = `⚡ ${duration.toFixed(0)} ms`;
+        healthIndicator.className = 'health-online w-3 h-3 rounded-full';
+        healthText.innerText = 'Online';
+    } catch(e) {
+        healthIndicator.className = 'health-offline w-3 h-3 rounded-full';
+        healthText.innerText = 'Offline';
+        responseTimeText.innerText = '';
+    }
+}
+function updatePreview(url) {
+    let pu = url; if (!pu.startsWith('http')) pu = 'https://' + pu;
+    targetFrame.srcdoc = `<html><body style="background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%"><a href="${pu}" target="_blank">Open in new tab</a></body></html>`;
+}
+refreshPreviewBtn.addEventListener('click', () => {
+    let u = targetUrl.value.trim();
+    if (u) {
+        updatePreview(u);
+        checkTargetHealth(u);
+    }
+});
+function startHealthCheck() {
+    if (healthCheckInterval) clearInterval(healthCheckInterval);
+    healthCheckInterval = setInterval(() => {
+        let u = targetUrl.value.trim();
+        if (u) checkTargetHealth(u);
+    }, 5000);
+}
+async function updateActiveUsers() {
+    try {
+        const res = await fetch('/api/heartbeat');
+        const data = await res.json();
+        activeUsersSpan.innerText = data.active;
+    } catch(e) {}
+}
+function startHeartbeat() {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(updateActiveUsers, 30000);
+    updateActiveUsers();
+}
+
+// ======================== Initialization ========================
 window.addEventListener('DOMContentLoaded', () => {
     if (rtChartCanvas) {
         const ctx = rtChartCanvas.getContext('2d');
@@ -603,31 +649,12 @@ window.addEventListener('DOMContentLoaded', () => {
             options: { responsive: true, maintainAspectRatio: true, scales: { y: { title: { display: true, text: 'ms' } } } }
         });
     }
-    // Attach event listeners
-    startBtn.onclick = startSingleAttack;
-    batchBtn.onclick = startBatchAttack;
-    stopBtn.onclick = stopAttack;
-    exportBtn.onclick = exportCSV;
-    
-    // Amplification toggle
-    amplifyToggle.onchange = () => {
-        amplificationEnabled = amplifyToggle.checked;
-        amplifyControls.style.display = amplificationEnabled ? 'block' : 'none';
-    };
-    amplifyKb.oninput = () => {
-        amplificationKB = parseFloat(amplifyKb.value);
-        amplifyValue.innerText = amplificationKB + ' KB';
-    };
-    amplifyType.onchange = () => { amplificationTypeSel = amplifyType.value; };
-    continuousToggle.onchange = () => { continuousMode = continuousToggle.checked; };
-    intervalMsInput.onchange = () => { intervalMsVal = parseInt(intervalMsInput.value) || 5000; };
-    
-    // Initial fetch status
     fetch('/api/status').then(r=>r.json()).then(d=>addLog(`Backend: ${d.message}`)).catch(()=>addLog("Backend OK"));
-    let u = targetUrl.value.trim(); if(u) updatePreview(u);
+    let u = targetUrl.value.trim();
+    if (u) updatePreview(u);
     startHealthCheck();
     startHeartbeat();
-    // Initialize amplification display
+    // Inisialisasi tampilan amplification
     amplifyToggle.dispatchEvent(new Event('change'));
     amplifyKb.dispatchEvent(new Event('input'));
 });
