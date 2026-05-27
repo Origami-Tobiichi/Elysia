@@ -19,10 +19,12 @@
         .range-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #ff3300; cursor: pointer; }
         .health-online { background-color: #22c55e; box-shadow: 0 0 5px #22c55e; }
         .health-offline { background-color: #ef4444; }
+        .response-preview { background: rgba(0,0,0,0.5); border-radius: 0.75rem; padding: 8px; max-height: 80px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; white-space: pre-wrap; word-break: break-all; }
     </style>
 </head>
 <body class="text-white p-4 md:p-6">
 <div class="max-w-7xl mx-auto">
+    <!-- Header -->
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-5xl md:text-6xl font-black text-red-600 drop-shadow-lg">💀 STRESSER EXTREME</h1>
@@ -36,7 +38,7 @@
     </div>
 
     <div class="grid lg:grid-cols-12 gap-6">
-        <!-- Panel Konfigurasi -->
+        <!-- Panel Kiri (Konfigurasi) -->
         <div class="lg:col-span-5 glass p-5 space-y-3">
             <h2 class="text-xl font-bold border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500"></i> Attack Config</h2>
             <div><label class="block text-sm font-semibold">🎯 Target URL</label><input id="targetUrl" class="w-full p-2 rounded bg-black border border-red-800" value="https://httpbin.org/anything"></div>
@@ -45,10 +47,10 @@
                 <div><label>HTTP Version</label><select id="httpVersion" class="w-full p-2 rounded bg-black"><option>1.1</option><option>2</option><option>3 (via Alt-Svc)</option></select></div>
             </div>
 
-            <!-- QUIC / HTTP/3 dan Spoofing (sama seperti screenshot) -->
+            <!-- QUIC / HTTP/3 dan Spoofing -->
             <div class="border-t border-gray-700 pt-2">
                 <div class="flex items-center gap-2"><i class="fas fa-broadcast-tower"></i><span class="font-bold">QUIC / HTTP/3</span></div>
-                <label><input type="checkbox" id="quicFlood" class="accent-red-600"> QUIC Stream Flood (buka multiple streams via HTTP/3)</label>
+                <label><input type="checkbox" id="quicFlood"> QUIC Stream Flood</label>
                 <div class="grid grid-cols-2 gap-1 text-xs mt-1">
                     <label><input type="checkbox" id="queryDepan"> Query Depan</label>
                     <label><input type="checkbox" id="queryBelakang"> Query Belakang</label>
@@ -84,7 +86,7 @@
             <div><label><input type="checkbox" id="dualConnection"> Sambungan Ganda (double request)</label></div>
             <div><label><input type="checkbox" id="continuousToggle"> Bot Mode (Continuous)</label> <input type="number" id="intervalMs" value="5000" class="w-24 p-1 rounded bg-black"></div>
 
-            <!-- Spoofing singkat -->
+            <!-- Spoofing IP -->
             <div class="flex gap-2">
                 <label><input type="checkbox" id="spoofIp" checked> XFF</label>
                 <label><input type="checkbox" id="spoofRealIp" checked> X-Real-IP</label>
@@ -95,16 +97,16 @@
 
             <div class="flex justify-between"><label><input type="checkbox" id="forceSuccess" checked> Force Success (200 in stats)</label><button id="resetExtremeBtn" class="bg-gray-800 text-xs px-3 py-1 rounded-full">Reset Extreme</button></div>
 
-            <!-- Tombol serangan HTTP biasa (SINGLE & BATCH) -->
+            <!-- Tombol serangan HTTP biasa -->
             <div class="flex gap-2 pt-2">
                 <button id="startBtn" class="btn-extreme flex-1 py-2 rounded font-bold">SINGLE</button>
                 <button id="batchBtn" class="btn-extreme flex-1 py-2 rounded font-bold">BATCH</button>
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-2 rounded disabled:opacity-50" disabled>STOP</button>
             </div>
 
-            <!-- Tombol serangan menggunakan autocannon, artillery, loadtest (pengganti bot) -->
+            <!-- Tombol autocannon, artillery, loadtest -->
             <div class="border-t border-purple-800 pt-2 mt-2">
-                <div class="font-bold"><i class="fas fa-skull-crossbones"></i> Autocannon/Artillery/Loadtest (Real Flood)</div>
+                <div class="font-bold"><i class="fas fa-skull-crossbones"></i> Autocannon/Artillery/Loadtest</div>
                 <div class="grid grid-cols-2 gap-2 mt-1">
                     <button id="btnAutocannon" class="bg-purple-800 py-1 rounded text-sm">Autocannon</button>
                     <button id="btnArtillery" class="bg-purple-800 py-1 rounded text-sm">Artillery</button>
@@ -117,7 +119,7 @@
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded text-sm">Export CSV</button>
         </div>
 
-        <!-- Panel Statistik dan Grafik (kanan) -->
+        <!-- Panel Kanan (Statistik, Grafik, Log) -->
         <div class="lg:col-span-7 space-y-5">
             <div class="glass p-4">
                 <div class="flex justify-between items-center">
@@ -141,9 +143,10 @@
             </div>
 
             <div class="glass p-3"><canvas id="rtChart" height="110"></canvas></div>
+
             <div class="glass p-3">
                 <div class="flex justify-between"><span class="font-semibold text-sm">Live Logs</span><span class="text-xs text-gray-400">Status & preview</span></div>
-                <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready. Pilih serangan: SINGLE/BATCH atau Autocannon/Artillery/Loadtest.</div></div>
+                <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready. Pilih serangan.</div></div>
                 <div class="mt-2 border-t border-gray-700 pt-1"><span class="text-xs">Raw Response Preview (last request):</span><div id="rawResponsePreview" class="response-preview mt-1 text-gray-300">-</div></div>
             </div>
         </div>
