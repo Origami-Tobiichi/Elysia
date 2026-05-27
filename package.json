@@ -9,14 +9,13 @@
   "dependencies": {
     "elysia": "^1.1.0",
     "undici": "^6.11.1",
-    "autocannon": "^7.15.0",
+    "autocannon": "^8.0.0",
     "artillery": "^2.0.0-31",
     "loadtest": "^4.1.0",
     "axios": "^1.6.8"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "@types/node": "^20.11.30",
-    "@types/autocannon": "^7.14.2"
+    "@types/node": "^20.11.30"
   }
 }
