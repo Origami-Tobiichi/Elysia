@@ -167,7 +167,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// Batch attack (massive)
+// Batch attack
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -265,7 +265,9 @@ export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
     console.error(error);
-    return { success: false, error: error.message };
+    // Perbaikan: ambil pesan error dengan aman
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { success: false, error: errorMessage };
   })
   .get('/api/status', () => ({
     status: 'ok',
