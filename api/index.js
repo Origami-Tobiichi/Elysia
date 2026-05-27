@@ -1,19 +1,6 @@
-export default async function handler(req, res) {
-  let app;
-  try {
-    const module = await import('../dist/index.js');
-    app = module.default || module.app || module;
-    if (!app || typeof app.fetch !== 'function') {
-      throw new Error('Invalid app export');
-    }
-  } catch (err) {
-    console.error('Failed to load app:', err);
-    res.statusCode = 200;
-    res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, error: `Failed to load app: ${err.message}` }));
-    return;
-  }
+import { app } from '../dist/index.js';
 
+export default async function handler(req, res) {
   try {
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers.host;
@@ -41,9 +28,8 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     res.end(responseBody);
   } catch (err) {
-    console.error('Handler error:', err);
     res.statusCode = 200;
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ success: false, error: err.message || 'Internal server error' }));
+    res.end(JSON.stringify({ success: false, error: err.message }));
   }
 }
