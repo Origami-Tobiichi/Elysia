@@ -1,6 +1,6 @@
 {
   "name": "web-stresser-extreme",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -9,12 +9,14 @@
   "dependencies": {
     "elysia": "^1.1.0",
     "undici": "^6.11.1",
-    "puppeteer-cluster": "^0.23.0",
-    "@sparticuz/chromium": "^148.0.0",
-    "puppeteer-core": "^25.0.4"
+    "autocannon": "^7.15.0",
+    "artillery": "^2.0.0-31",
+    "loadtest": "^4.1.0",
+    "axios": "^1.6.8"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "@types/node": "^20.11.30"
+    "@types/node": "^20.11.30",
+    "@types/autocannon": "^7.14.2"
   }
 }
