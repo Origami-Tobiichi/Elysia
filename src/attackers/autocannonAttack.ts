@@ -16,7 +16,7 @@ export async function runAutocannon(options: AutocannonOptions): Promise<any> {
       url: options.url,
       connections: options.connections,
       duration: options.duration,
-      method: options.method || 'GET',
+      method: options.method as any, // cast untuk mengatasi union type
       headers: options.headers,
       body: options.body,
       amount: options.amount,
