@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Elysia Vercel</title>
+    <title>💀 Web Stresser Ultimate | AutoCannon Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -14,6 +14,8 @@
         .btn-primary:hover { transform: scale(1.02); box-shadow: 0 0 20px #ff3300; }
         .btn-secondary { background: #3b82f6; }
         .btn-secondary:hover { background: #2563eb; }
+        .btn-autocannon { background: linear-gradient(90deg, #8b5cf6, #6d28d9); }
+        .btn-autocannon:hover { transform: scale(1.02); box-shadow: 0 0 20px #8b5cf6; }
         .stat-box { background: #000000aa; border-radius: 1rem; }
         .range-slider { -webkit-appearance: none; background: #2d2d2d; height: 4px; border-radius: 2px; }
         .range-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #ff3300; cursor: pointer; }
@@ -26,7 +28,7 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-5xl md:text-6xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE</h1>
-            <p class="text-gray-400 text-sm mt-1">Elysia · Vercel AWS · Multi‑Method · Amplification · Always Success</p>
+            <p class="text-gray-400 text-sm mt-1">Elysia · Vercel · AutoCannon · Multi‑Method · Always Success</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -36,7 +38,7 @@
     </div>
 
     <div class="grid lg:grid-cols-12 gap-6">
-        <!-- Panel Kiri (Konfigurasi) -->
+        <!-- Panel Kiri -->
         <div class="lg:col-span-5 glass p-5 space-y-4">
             <h2 class="text-xl font-bold border-b border-red-800 pb-2"><i class="fas fa-skull text-red-500"></i> Attack Config</h2>
             <div><label class="block text-sm font-semibold">🎯 Target URL</label><input id="targetUrl" class="w-full p-2 rounded bg-black border border-red-800" value="https://httpbin.org/anything"></div>
@@ -53,7 +55,7 @@
                 <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded bg-black"></div>
             </div>
 
-            <!-- Amplification dengan slider & pilihan jenis -->
+            <!-- Amplification -->
             <div>
                 <div class="flex justify-between items-center"><span class="font-semibold">📈 Amplification</span><label><input type="checkbox" id="amplifyToggle" class="accent-red-600"> Enable</label></div>
                 <div id="amplifyControls" style="display:none;" class="space-y-2 mt-1">
@@ -66,16 +68,19 @@
             <div><label class="block text-sm">🍪 Cookies</label><input id="cookies" class="w-full p-2 rounded bg-black"></div>
             <div><label><input type="checkbox" id="dualConnection"> 🔗 Dual Connection (2x request)</label></div>
             <div><label><input type="checkbox" id="forceSuccess" class="accent-yellow-600" checked> ✅ Force Success (always 200 in stats)</label></div>
+
+            <!-- Tombol Serangan -->
             <div class="flex gap-2 pt-2">
                 <button id="startBtn" class="btn-primary flex-1 py-2 rounded font-bold"><i class="fas fa-bomb"></i> SINGLE</button>
                 <button id="batchBtn" class="btn-secondary flex-1 py-2 rounded font-bold"><i class="fas fa-rocket"></i> BATCH</button>
+                <button id="autocannonBtn" class="btn-autocannon flex-1 py-2 rounded font-bold"><i class="fas fa-cannon"></i> AUTOCANNON</button>
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-2 rounded disabled:opacity-50" disabled><i class="fas fa-stop"></i> STOP</button>
             </div>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded text-sm"><i class="fas fa-download"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Serangan nyata dari IP Vercel (AWS). Force Success aktif = statistik selalu hijau.</div>
+            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ AutoCannon hanya berfungsi di lingkungan lokal (bukan Vercel).</div>
         </div>
 
-        <!-- Panel Kanan (Statistik, Grafik, Log) -->
+        <!-- Panel Kanan -->
         <div class="lg:col-span-7 space-y-5">
             <!-- Target Preview -->
             <div class="glass p-4">
@@ -83,7 +88,7 @@
                 <div class="mt-2 bg-black/40 rounded-xl h-28 overflow-hidden"><iframe id="targetFrame" class="w-full h-full" srcdoc="<html><body style='background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%'>Preview</body></html>"></iframe></div>
             </div>
 
-            <!-- Live Metrics -->
+            <!-- Metrics -->
             <div class="glass p-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                     <div class="stat-box p-2"><div class="text-3xl text-green-400 font-mono" id="successCount">0</div><div class="text-xs">SUCCESS</div></div>
@@ -97,14 +102,14 @@
                 </div>
             </div>
 
-            <!-- Grafik Respon -->
+            <!-- Chart -->
             <div class="glass p-3"><canvas id="rtChart" height="110"></canvas></div>
 
             <!-- Log & Raw Response -->
             <div class="glass p-3">
                 <div class="flex justify-between"><span class="font-semibold text-sm"><i class="fas fa-terminal"></i> Live Logs</span><span class="text-xs text-gray-400">Status & preview</span></div>
                 <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready. Force Success ON → all requests counted as success.</div></div>
-                <div class="mt-2 border-t border-gray-700 pt-1"><span class="text-xs">📄 Raw Response Preview (last request):</span><div id="rawResponsePreview" class="response-preview mt-1 text-gray-300 break-all">-</div></div>
+                <div class="mt-2 border-t border-gray-700 pt-1"><span class="text-xs">📄 Raw Response Preview (last request):</span><div id="rawResponsePreview" class="text-gray-300 break-all text-xs">-</div></div>
             </div>
         </div>
     </div>
