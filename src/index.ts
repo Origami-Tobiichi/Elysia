@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// ==================== Konfigurasi global ====================
+// Optimasi koneksi untuk Vercel
 const globalAgent = new Agent({
   connections: 100,
   pipelining: 1,
@@ -10,7 +10,6 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
-// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -19,7 +18,7 @@ setInterval(() => {
   }
 }, 30000);
 
-// ==================== Helper functions ====================
+// Helper functions
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -34,7 +33,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return randomString(size);
 }
 
-// ==================== Single Attack ====================
+// ==================== SINGLE ATTACK ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -169,7 +168,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// ==================== Batch Attack ====================
+// ==================== BATCH ATTACK ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -244,7 +243,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
-// ==================== Autocannon Attack ====================
+// ==================== AUTOCANNON ATTACK (Baru) ====================
 interface AutocannonOptions {
   url: string;
   connections: number;
@@ -263,7 +262,7 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
         connections: Math.min(options.connections, 100),
         duration: Math.min(options.duration, 9),
         amount: options.amount ? Math.min(options.amount, 5000) : undefined,
-        method: options.method || 'GET',
+        method: (options.method || 'GET') as any, // cast to any untuk menghindari error type
         headers: options.headers,
         body: options.body,
         pipelining: 1,
@@ -278,7 +277,7 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
   });
 }
 
-// ==================== Elysia App ====================
+// ==================== ELYSIA APP ====================
 export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
@@ -288,7 +287,7 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Autocannon Edition',
+    message: 'Web Stresser Ultimate - with Autocannon',
     version: '3.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
