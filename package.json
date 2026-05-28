@@ -1,24 +1,21 @@
 {
-  "name": "web-stresser-extreme",
-  "version": "2.0.0",
+  "name": "web-stresser-elysia",
+  "version": "4.0.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
     "vercel-build": "npm run build"
   },
   "dependencies": {
     "elysia": "^1.1.0",
     "undici": "^6.11.1",
-    "autocannon": "^8.0.0",
-    "artillery": "^2.0.0-31",
-    "loadtest": "^4.1.0",
-    "axios": "^1.6.8", 
-    "uuid": "^14.0.0",
-    "yaeti": "^1.0.3"
+    "autocannon": "^7.15.0"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
-    "@types/node": "^20.11.30", 
-    "@types/autocannon": "^7.12.7"
+    "@types/node": "^20.11.30",
+    "tsx": "^4.7.0"
   }
 }
