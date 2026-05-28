@@ -18,6 +18,7 @@ const cookies = document.getElementById('cookies');
 const startBtn = document.getElementById('startBtn');
 const batchBtn = document.getElementById('batchBtn');
 const stopBtn = document.getElementById('stopBtn');
+const autocannonBtn = document.getElementById('autocannonBtn');
 const exportBtn = document.getElementById('exportBtn');
 const refreshPreviewBtn = document.getElementById('refreshPreview');
 const targetFrame = document.getElementById('targetFrame');
@@ -37,6 +38,9 @@ const logArea = document.getElementById('logArea');
 const rtChartCanvas = document.getElementById('rtChart');
 const rawResponsePreview = document.getElementById('rawResponsePreview');
 const activeUsersSpan = document.getElementById('activeUsers');
+const autocannonPanel = document.getElementById('autocannonPanel');
+const autocannonResult = document.getElementById('autocannonResult');
+const closeAutocannonPanel = document.getElementById('closeAutocannonPanel');
 
 // State
 let chart;
@@ -74,47 +78,7 @@ function addLog(msg, isError = false) {
     div.innerHTML = `${isError ? '❌' : '✅'} ${msg}`;
     logArea.appendChild(div);
     logArea.scrollTop = logArea.scrollHeight;
-    if (logArea.children.length > 200) logArea.removeChild(logArea.firstChild);
-}
-
-function addTableStat(title, data) {
-    const div = document.createElement('div');
-    div.className = 'border border-gray-700 rounded p-2 mb-2 font-mono text-xs bg-black/40';
-    div.innerHTML = `<div class="font-bold text-yellow-400 mb-1">${title}</div>${data}`;
-    logArea.appendChild(div);
-    logArea.scrollTop = logArea.scrollHeight;
-    if (logArea.children.length > 200) logArea.removeChild(logArea.firstChild);
-}
-
-function formatAutocannonResult(result) {
-    if (!result || !result.latency) return '';
-    let html = '';
-    // Tabel latency
-    html += `<table class="w-full text-left text-gray-300 border-collapse">`;
-    html += `<tr class="border-b border-gray-700"><th class="pr-2">Stat</th><th class="pr-2">2.5%</th><th class="pr-2">50%</th><th class="pr-2">97.5%</th><th class="pr-2">99%</th><th>Avg</th><th>Stdev</th><th>Max</th></tr>`;
-    const lat = result.latency;
-    html += `<tr><td>Latency</td><td>${lat.p2_5 || 0} ms</td><td>${lat.p50 || 0} ms</td><td>${lat.p97_5 || 0} ms</td><td>${lat.p99 || 0} ms</td><td>${lat.average?.toFixed(2) || 0} ms</td><td>${lat.stddev?.toFixed(2) || 0} ms</td><td>${lat.max || 0} ms</td></tr>`;
-    html += `</table><br>`;
-    // Tabel request per second
-    if (result.requests) {
-        const req = result.requests;
-        html += `<table class="w-full text-left text-gray-300 border-collapse">`;
-        html += `<tr class="border-b border-gray-700"><th class="pr-2">Stat</th><th class="pr-2">1%</th><th class="pr-2">2.5%</th><th class="pr-2">50%</th><th class="pr-2">97.5%</th><th>Avg</th><th>Stdev</th><th>Min</th></tr>`;
-        html += `<tr><td>Req/Sec</td><td>${req.p1 || 0}</td><td>${req.p2_5 || 0}</td><td>${req.p50 || 0}</td><td>${req.p97_5 || 0}</td><td>${req.average?.toFixed(2) || 0}</td><td>${req.stddev?.toFixed(2) || 0}</td><td>${req.min || 0}</td></tr>`;
-        html += `</table><br>`;
-    }
-    if (result.throughput) {
-        html += `<div>📊 Total: ${result.requests?.total || 0} requests in ${(result.duration || 0).toFixed(2)}s, ${(result.throughput?.total || 0) / 1e6} MB read</div>`;
-    }
-    if (result.errors) {
-        html += `<div>⚠️ Errors: ${result.errors} (timeouts: ${result.timeouts || 0})</div>`;
-    }
-    return html;
-}
-
-function formatBatchResult(data) {
-    if (!data) return '';
-    return `<div>✅ Total requests: ${data.totalRequests}<br>✅ Success: ${data.successCount}<br>❌ Fail: ${data.failCount}<br>⏱️ Total time: ${(data.totalTimeMs / 1000).toFixed(2)}s<br>📈 RPS: ${data.rps}<br>📊 Avg latency: ${data.avgLatencyMs.toFixed(2)} ms</div>`;
+    if (logArea.children.length > 100) logArea.removeChild(logArea.firstChild);
 }
 
 function updateUI() {
@@ -184,7 +148,41 @@ function parseCookies() {
     return obj;
 }
 
-// ======================== Attack Functions ========================
+// ======================== Display Autocannon Result ========================
+function displayAutocannonResult(result) {
+    autocannonPanel.style.display = 'block';
+    let html = `<table class="result-table">`;
+    // Latency table
+    if (result.latency) {
+        html += `<tr><th colspan="2">📊 Latency (ms)</th></tr>
+                <tr><td>2.5%</td><td>${result.latency.p2_5 || '-'}</td></tr>
+                <tr><td>50% (Median)</td><td>${result.latency.p50 || '-'}</td></tr>
+                <tr><td>97.5%</td><td>${result.latency.p97_5 || '-'}</td></tr>
+                <tr><td>99%</td><td>${result.latency.p99 || '-'}</td></tr>
+                <tr><td>Average</td><td>${result.latency.average || '-'}</td></tr>
+                <tr><td>Max</td><td>${result.latency.max || '-'}</td></tr>`;
+    }
+    // Requests per second
+    if (result.requests) {
+        html += `<tr><th colspan="2">📈 Requests / Sec</th></tr>
+                <tr><td>Average</td><td>${result.requests.average || '-'}</td></tr>
+                <tr><td>Min</td><td>${result.requests.min || '-'}</td></tr>
+                <tr><td>Max</td><td>${result.requests.max || '-'}</td></tr>`;
+    }
+    // Overall
+    html += `<tr><th colspan="2">📋 Overall</th></tr>
+            <tr><td>Total Requests</td><td>${result.requests?.total || '-'}</td></tr>
+            <tr><td>Duration (s)</td><td>${result.duration?.toFixed(2) || '-'}</td></tr>
+            <tr><td>Bytes Read</td><td>${(result.bytesRead / (1024*1024)).toFixed(2)} MB</td></tr>`;
+    html += `</table>`;
+    autocannonResult.innerHTML = html;
+}
+
+closeAutocannonPanel.addEventListener('click', () => {
+    autocannonPanel.style.display = 'none';
+});
+
+// ======================== SINGLE ATTACK ========================
 async function runSingleAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
@@ -210,6 +208,7 @@ async function runSingleAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     let completed = 0;
@@ -267,12 +266,14 @@ async function runSingleAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
     }
 }
 
+// ======================== BATCH ATTACK ========================
 async function runBatchAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
@@ -298,6 +299,7 @@ async function runBatchAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     const headers = parseHeaders();
@@ -323,9 +325,6 @@ async function runBatchAttack() {
         });
         const data = await res.json();
         if (data.success) {
-            // Tampilkan tabel hasil batch
-            const batchHtml = formatBatchResult(data);
-            addTableStat('📊 BATCH RESULT', batchHtml);
             if (forceSuccessCheck.checked) {
                 stats.success = data.totalRequests;
                 stats.totalBytes = data.totalBytes;
@@ -348,37 +347,38 @@ async function runBatchAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
     }
 }
 
+// ======================== AUTOCANNON ATTACK ========================
 async function runAutocannonAttack() {
-    if (isRunning) { addLog("Attack already running!", true); return; }
+    if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
     if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
-    let total = Math.min(parseInt(totalInput.value), 5000);
-    let concurrency = Math.min(parseInt(concurrencyInput.value), 100);
-    let duration = Math.min(Math.floor(parseInt(timeoutInput.value) / 1000), 9);
-    if (duration <= 0) duration = 5;
+    let connections = parseInt(concurrencyInput.value);
+    let duration = Math.min(parseInt(timeoutInput.value) / 1000, 9);
+    let amount = parseInt(totalInput.value);
+    const headers = parseHeaders();
     
-    addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${concurrency} | Duration:${duration}s | Total:${total}`);
+    if (duration <= 0) duration = 5;
+    if (duration > 9) duration = 9;
+    connections = Math.min(connections, 100);
+    amount = Math.min(amount, 5000);
+    
+    addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${connections} | Duration:${duration}s | Total:${amount}`);
     resetStats();
-    stats.total = total;
-    stats.startTime = Date.now();
     isRunning = true;
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
-    
-    const headers = parseHeaders();
-    const cookieObj = parseCookies();
-    const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
-    if (cookieStr) headers["Cookie"] = cookieStr;
     
     try {
         const res = await fetch('/api/autocannon', {
@@ -386,31 +386,28 @@ async function runAutocannonAttack() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 url, method: mtd, headers, body: "",
-                connections: concurrency,
-                duration: duration,
-                amount: total,
+                connections, duration, amount
             }),
             signal: abortController.signal
         });
         const data = await res.json();
         if (data.success) {
-            const result = data.result;
-            // Tampilkan tabel statistik
-            const tableHtml = formatAutocannonResult(result);
-            addTableStat('📈 AUTOCANNON RESULT', tableHtml);
-            // Update stats summary
-            if (result.requests) {
-                stats.total = result.requests.total || total;
-                stats.success = result.requests.completed || 0;
-                stats.fail = result.errors || 0;
-                stats.totalBytes = result.throughput?.total || 0;
-                stats.times = result.latency?.values || [];
+            addLog(`✅ AUTOCANNON completed`);
+            if (data.result) {
+                // Tampilkan tabel statistik
+                displayAutocannonResult(data.result);
+                // Update stats ringkas
+                stats.total = data.result.requests?.total || 0;
+                stats.success = data.result.requests?.total || 0;
+                stats.fail = data.result.errors || 0;
+                stats.totalBytes = data.result.bytesRead || 0;
+                if (data.result.latency && data.result.latency.average) {
+                    stats.times = [data.result.latency.average];
+                }
                 updateUI();
             }
-            addLog(`✅ Autocannon finished: ${result.requests?.completed || 0}/${result.requests?.total || total} success`);
-            rawResponsePreview.innerText = `Autocannon: ${result.requests?.completed || 0}/${result.requests?.total || total} success, RPS: ${result.requests?.average?.toFixed(2) || 0}`;
         } else {
-            addLog(`❌ Autocannon failed: ${data.error}`, true);
+            addLog(`❌ AUTOCANNON gagal: ${data.error}`, true);
         }
     } catch(e) {
         if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
@@ -418,6 +415,7 @@ async function runAutocannonAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
@@ -431,6 +429,7 @@ function stopAttack() {
         stopBtn.disabled = true;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         isRunning = false;
     } else {
         addLog("No attack running", true);
@@ -449,18 +448,6 @@ function exportCSV() {
     link.click();
     addLog("CSV exported");
 }
-
-// ======================== Event Listeners ========================
-startBtn.addEventListener('click', runSingleAttack);
-batchBtn.addEventListener('click', runBatchAttack);
-// Tambahkan event untuk tombol Autocannon (jika ada di HTML)
-// Pastikan tombol dengan id "btnAutocannon" ada di HTML
-const btnAutocannon = document.getElementById('btnAutocannon');
-if (btnAutocannon) {
-    btnAutocannon.addEventListener('click', runAutocannonAttack);
-}
-stopBtn.addEventListener('click', stopAttack);
-exportBtn.addEventListener('click', exportCSV);
 
 // ======================== Health & Preview ========================
 async function checkTargetHealth(url) {
@@ -508,7 +495,14 @@ function startHeartbeat() {
     updateActiveUsers();
 }
 
-// ======================== Initialization ========================
+// ======================== Event Listeners ========================
+startBtn.addEventListener('click', runSingleAttack);
+batchBtn.addEventListener('click', runBatchAttack);
+autocannonBtn.addEventListener('click', runAutocannonAttack);
+stopBtn.addEventListener('click', stopAttack);
+exportBtn.addEventListener('click', exportCSV);
+
+// Inisialisasi
 window.onload = () => {
     const ctx = rtChartCanvas.getContext('2d');
     chart = new Chart(ctx, {
