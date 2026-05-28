@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>💀 Web Stresser Ultimate | Autocannon Professional</title>
+    <title>💀 Web Stresser Ultimate | Unlimited Mode</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -30,7 +30,7 @@
     <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
         <div>
             <h1 class="text-5xl md:text-6xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE</h1>
-            <p class="text-gray-400 text-sm mt-1">Autocannon · Single · Batch · Multi‑Method · Amplification</p>
+            <p class="text-gray-400 text-sm mt-1">Unlimited Mode · Autocannon · Single · Batch · Infinite Loop</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -49,13 +49,14 @@
                 <div><label>Attack Type</label><select id="attackType" class="w-full p-2 rounded bg-black"><option value="normal">Normal Flood</option><option value="slowloris">Slowloris (Keep-Alive)</option><option value="rudy">RUDY (Slow POST)</option><option value="range">Range Amplification</option><option value="chunked">Chunked Transfer</option><option value="multipart">Multipart Form Large</option></select></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
-                <div><label>⚡ Concurrency</label><input type="number" id="concurrency" value="50" class="w-full p-2 rounded bg-black"></div>
-                <div><label>📊 Total Requests</label><input type="number" id="total" value="1000" class="w-full p-2 rounded bg-black"></div>
+                <div><label>⚡ Concurrency (max 5000)</label><input type="number" id="concurrency" value="200" max="5000" class="w-full p-2 rounded bg-black"></div>
+                <div><label>📊 Total Requests (0 = unlimited)</label><input type="number" id="total" value="1000" class="w-full p-2 rounded bg-black"></div>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded bg-black"></div>
                 <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded bg-black"></div>
             </div>
+            <div><label><input type="checkbox" id="unlimitedMode"> 🔁 Unlimited Mode (loop infinite)</label></div>
 
             <!-- Amplification -->
             <div>
@@ -77,18 +78,16 @@
             </div>
             <button id="autocannonBtn" class="btn-primary w-full py-2 rounded font-bold"><i class="fas fa-tachometer-alt"></i> AUTOCANNON</button>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded text-sm"><i class="fas fa-download"></i> Export CSV</button>
-            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Serangan nyata dari IP Vercel. Force Success aktif = statistik selalu hijau.</div>
+            <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3 mt-2">⚠️ Unlimited mode: serangan terus berjalan sampai STOP. Hanya untuk server sendiri.</div>
         </div>
 
         <!-- Panel Kanan (Statistik, Grafik, Log, Autocannon Result) -->
         <div class="lg:col-span-7 space-y-5">
-            <!-- Target Preview -->
             <div class="glass p-4">
                 <div class="flex justify-between items-center"><span><i class="fas fa-eye"></i> Target Preview</span><div><span id="healthIndicator" class="w-3 h-3 rounded-full inline-block bg-gray-500"></span><span id="healthText">Checking...</span><span id="responseTimeText" class="ml-2 text-xs"></span><button id="refreshPreview" class="bg-gray-700 px-2 py-0.5 rounded text-xs"><i class="fas fa-sync-alt"></i> Refresh</button></div></div>
                 <div class="mt-2 bg-black/40 rounded-xl h-28 overflow-hidden"><iframe id="targetFrame" class="w-full h-full" srcdoc="<html><body style='background:#111;color:#fff;display:flex;align-items:center;justify-content:center;height:100%'>Preview</body></html>"></iframe></div>
             </div>
 
-            <!-- Live Metrics -->
             <div class="glass p-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                     <div class="stat-box p-2"><div class="text-3xl text-green-400 font-mono" id="successCount">0</div><div class="text-xs">SUCCESS</div></div>
@@ -102,17 +101,14 @@
                 </div>
             </div>
 
-            <!-- Grafik Respon -->
             <div class="glass p-3"><canvas id="rtChart" height="110"></canvas></div>
 
-            <!-- Log & Raw Response -->
             <div class="glass p-3">
                 <div class="flex justify-between"><span class="font-semibold text-sm"><i class="fas fa-terminal"></i> Live Logs</span><span class="text-xs text-gray-400">Status & preview</span></div>
-                <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready. Force Success ON → all requests counted as success.</div></div>
+                <div id="logArea" class="h-32 overflow-y-auto text-xs font-mono mt-1 space-y-1"><div class="text-green-400">⚡ Ready. Unlimited mode = infinite loop.</div></div>
                 <div class="mt-2 border-t border-gray-700 pt-1"><span class="text-xs">📄 Raw Response Preview (last request):</span><div id="rawResponsePreview" class="response-preview mt-1 text-gray-300 break-all">-</div></div>
             </div>
 
-            <!-- Autocannon Result Panel (khusus menampilkan tabel statistik) -->
             <div class="glass p-3" id="autocannonPanel" style="display: none;">
                 <div class="flex justify-between items-center"><span class="font-semibold text-sm"><i class="fas fa-chart-line"></i> Autocannon Result</span><button id="closeAutocannonPanel" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button></div>
                 <div id="autocannonResult" class="autocannon-result text-xs font-mono mt-2">-</div>
