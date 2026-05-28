@@ -17,6 +17,7 @@ const customHeaders = document.getElementById('customHeaders');
 const cookies = document.getElementById('cookies');
 const startBtn = document.getElementById('startBtn');
 const batchBtn = document.getElementById('batchBtn');
+const autocannonBtn = document.getElementById('autocannonBtn');
 const stopBtn = document.getElementById('stopBtn');
 const exportBtn = document.getElementById('exportBtn');
 const refreshPreviewBtn = document.getElementById('refreshPreview');
@@ -52,7 +53,7 @@ let lastTotalBytes = 0;
 let healthCheckInterval = null;
 let heartbeatInterval = null;
 
-// Amplification toggle
+// Amplification state
 let amplificationEnabled = false;
 let amplificationKB = 500;
 let amplificationTypeSel = 'normal';
@@ -67,7 +68,7 @@ amplifyKb.addEventListener('input', () => {
 });
 amplifyType.addEventListener('change', () => { amplificationTypeSel = amplifyType.value; });
 
-// ======================== Helper Functions ========================
+// Helper functions
 function addLog(msg, isError = false) {
     const div = document.createElement('div');
     div.className = `border-l-2 pl-2 mb-1 ${isError ? 'border-red-500 text-red-300' : 'border-green-500 text-green-300'}`;
@@ -162,12 +163,11 @@ async function runSingleAttack() {
     const actualConcurrency = Math.min(concurrency * multiplier, 100);
     const actualTimeout = Math.min(timeout, 9000);
     
-    // Batasi untuk Vercel
     if (total > 5000) addLog(`⚠️ Total requests ${total} dibatasi ke 5000.`, true);
     if (concurrency > 100) addLog(`⚠️ Concurrency ${concurrency} dibatasi ke 100.`, true);
     if (timeout > 9000) addLog(`⚠️ Timeout ${timeout}ms dibatasi ke 9000ms.`, true);
     
-    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
+    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
     resetStats();
     stats.total = actualTotal;
     stats.startTime = Date.now();
@@ -175,6 +175,7 @@ async function runSingleAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     let completed = 0;
@@ -232,6 +233,7 @@ async function runSingleAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
@@ -255,7 +257,7 @@ async function runBatchAttack() {
     const actualConcurrency = Math.min(concurrency * multiplier, 50);
     const actualTimeout = Math.min(timeout, 9000);
     
-    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal} | Amp:${amplificationEnabled?amplificationKB+"KB":"OFF"}`);
+    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
     resetStats();
     stats.total = actualTotal;
     stats.startTime = Date.now();
@@ -263,6 +265,7 @@ async function runBatchAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     const headers = parseHeaders();
@@ -310,6 +313,75 @@ async function runBatchAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
+        stopBtn.disabled = true;
+        abortController = null;
+        updateUI();
+    }
+}
+
+async function runAutocannon() {
+    if (isRunning) { addLog("Attack already running!", true); return; }
+    let url = targetUrl.value.trim();
+    if (!url) { addLog("URL required", true); return; }
+    if (!url.startsWith("http")) url = "https://" + url;
+    const mtd = method.value;
+    let connections = parseInt(concurrencyInput.value);
+    let duration = Math.floor(parseInt(timeoutInput.value) / 1000);
+    if (duration < 1) duration = 1;
+    if (duration > 10) duration = 10;
+    const amount = Math.min(parseInt(totalInput.value), 5000);
+    
+    addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${connections} | Duration:${duration}s | Amount:${amount}`);
+    resetStats();
+    stats.startTime = Date.now();
+    isRunning = true;
+    abortController = new AbortController();
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
+    stopBtn.disabled = false;
+    
+    const headers = parseHeaders();
+    const cookieObj = parseCookies();
+    const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
+    if (cookieStr) headers["Cookie"] = cookieStr;
+    
+    try {
+        const res = await fetch('/api/autocannon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url, method: mtd, headers, body: "",
+                connections, duration, amount
+            }),
+            signal: abortController.signal
+        });
+        const data = await res.json();
+        if (data.success) {
+            addLog(`✅ AUTOCANNON completed`);
+            if (data.result) {
+                let statsMsg = `Total:${data.result.requests?.total || 0} | Complete:${data.result.requests?.completed || 0} | Errors:${data.result.errors || 0}`;
+                if (data.result.latency) statsMsg += ` | Avg Latency:${data.result.latency.average?.toFixed(0) || '?'}ms`;
+                addLog(`📊 Result: ${statsMsg}`);
+                stats.total = data.result.requests?.total || 0;
+                stats.success = data.result.requests?.completed || 0;
+                stats.fail = data.result.errors || 0;
+                stats.times = data.result.latency?.values || [];
+                updateUI();
+            }
+            rawResponsePreview.innerText = `AutoCannon completed`;
+        } else {
+            addLog(`❌ AutoCannon gagal: ${data.error}`, true);
+            rawResponsePreview.innerText = `AutoCannon error: ${data.error}`;
+        }
+    } catch(e) {
+        if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
+    } finally {
+        isRunning = false;
+        startBtn.disabled = false;
+        batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
@@ -323,6 +395,7 @@ function stopAttack() {
         stopBtn.disabled = true;
         startBtn.disabled = false;
         batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
         isRunning = false;
     } else {
         addLog("No attack running", true);
@@ -391,10 +464,11 @@ function startHeartbeat() {
 // ======================== Event Listeners ========================
 startBtn.addEventListener('click', runSingleAttack);
 batchBtn.addEventListener('click', runBatchAttack);
+autocannonBtn.addEventListener('click', runAutocannon);
 stopBtn.addEventListener('click', stopAttack);
 exportBtn.addEventListener('click', exportCSV);
 
-// Inisialisasi
+// ======================== Initialization ========================
 window.onload = () => {
     const ctx = rtChartCanvas.getContext('2d');
     chart = new Chart(ctx, {
