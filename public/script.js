@@ -17,7 +17,6 @@ const customHeaders = document.getElementById('customHeaders');
 const cookies = document.getElementById('cookies');
 const startBtn = document.getElementById('startBtn');
 const batchBtn = document.getElementById('batchBtn');
-const autocannonBtn = document.getElementById('autocannonBtn');
 const stopBtn = document.getElementById('stopBtn');
 const exportBtn = document.getElementById('exportBtn');
 const refreshPreviewBtn = document.getElementById('refreshPreview');
@@ -53,7 +52,7 @@ let lastTotalBytes = 0;
 let healthCheckInterval = null;
 let heartbeatInterval = null;
 
-// Amplification state
+// Amplification toggle
 let amplificationEnabled = false;
 let amplificationKB = 500;
 let amplificationTypeSel = 'normal';
@@ -68,14 +67,54 @@ amplifyKb.addEventListener('input', () => {
 });
 amplifyType.addEventListener('change', () => { amplificationTypeSel = amplifyType.value; });
 
-// Helper functions
+// ======================== Helper Functions ========================
 function addLog(msg, isError = false) {
     const div = document.createElement('div');
     div.className = `border-l-2 pl-2 mb-1 ${isError ? 'border-red-500 text-red-300' : 'border-green-500 text-green-300'}`;
     div.innerHTML = `${isError ? '❌' : '✅'} ${msg}`;
     logArea.appendChild(div);
     logArea.scrollTop = logArea.scrollHeight;
-    if (logArea.children.length > 100) logArea.removeChild(logArea.firstChild);
+    if (logArea.children.length > 200) logArea.removeChild(logArea.firstChild);
+}
+
+function addTableStat(title, data) {
+    const div = document.createElement('div');
+    div.className = 'border border-gray-700 rounded p-2 mb-2 font-mono text-xs bg-black/40';
+    div.innerHTML = `<div class="font-bold text-yellow-400 mb-1">${title}</div>${data}`;
+    logArea.appendChild(div);
+    logArea.scrollTop = logArea.scrollHeight;
+    if (logArea.children.length > 200) logArea.removeChild(logArea.firstChild);
+}
+
+function formatAutocannonResult(result) {
+    if (!result || !result.latency) return '';
+    let html = '';
+    // Tabel latency
+    html += `<table class="w-full text-left text-gray-300 border-collapse">`;
+    html += `<tr class="border-b border-gray-700"><th class="pr-2">Stat</th><th class="pr-2">2.5%</th><th class="pr-2">50%</th><th class="pr-2">97.5%</th><th class="pr-2">99%</th><th>Avg</th><th>Stdev</th><th>Max</th></tr>`;
+    const lat = result.latency;
+    html += `<tr><td>Latency</td><td>${lat.p2_5 || 0} ms</td><td>${lat.p50 || 0} ms</td><td>${lat.p97_5 || 0} ms</td><td>${lat.p99 || 0} ms</td><td>${lat.average?.toFixed(2) || 0} ms</td><td>${lat.stddev?.toFixed(2) || 0} ms</td><td>${lat.max || 0} ms</td></tr>`;
+    html += `</table><br>`;
+    // Tabel request per second
+    if (result.requests) {
+        const req = result.requests;
+        html += `<table class="w-full text-left text-gray-300 border-collapse">`;
+        html += `<tr class="border-b border-gray-700"><th class="pr-2">Stat</th><th class="pr-2">1%</th><th class="pr-2">2.5%</th><th class="pr-2">50%</th><th class="pr-2">97.5%</th><th>Avg</th><th>Stdev</th><th>Min</th></tr>`;
+        html += `<tr><td>Req/Sec</td><td>${req.p1 || 0}</td><td>${req.p2_5 || 0}</td><td>${req.p50 || 0}</td><td>${req.p97_5 || 0}</td><td>${req.average?.toFixed(2) || 0}</td><td>${req.stddev?.toFixed(2) || 0}</td><td>${req.min || 0}</td></tr>`;
+        html += `</table><br>`;
+    }
+    if (result.throughput) {
+        html += `<div>📊 Total: ${result.requests?.total || 0} requests in ${(result.duration || 0).toFixed(2)}s, ${(result.throughput?.total || 0) / 1e6} MB read</div>`;
+    }
+    if (result.errors) {
+        html += `<div>⚠️ Errors: ${result.errors} (timeouts: ${result.timeouts || 0})</div>`;
+    }
+    return html;
+}
+
+function formatBatchResult(data) {
+    if (!data) return '';
+    return `<div>✅ Total requests: ${data.totalRequests}<br>✅ Success: ${data.successCount}<br>❌ Fail: ${data.failCount}<br>⏱️ Total time: ${(data.totalTimeMs / 1000).toFixed(2)}s<br>📈 RPS: ${data.rps}<br>📊 Avg latency: ${data.avgLatencyMs.toFixed(2)} ms</div>`;
 }
 
 function updateUI() {
@@ -163,11 +202,7 @@ async function runSingleAttack() {
     const actualConcurrency = Math.min(concurrency * multiplier, 100);
     const actualTimeout = Math.min(timeout, 9000);
     
-    if (total > 5000) addLog(`⚠️ Total requests ${total} dibatasi ke 5000.`, true);
-    if (concurrency > 100) addLog(`⚠️ Concurrency ${concurrency} dibatasi ke 100.`, true);
-    if (timeout > 9000) addLog(`⚠️ Timeout ${timeout}ms dibatasi ke 9000ms.`, true);
-    
-    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
+    addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
     resetStats();
     stats.total = actualTotal;
     stats.startTime = Date.now();
@@ -175,7 +210,6 @@ async function runSingleAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
-    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     let completed = 0;
@@ -233,7 +267,6 @@ async function runSingleAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
-        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
@@ -257,7 +290,7 @@ async function runBatchAttack() {
     const actualConcurrency = Math.min(concurrency * multiplier, 50);
     const actualTimeout = Math.min(timeout, 9000);
     
-    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Type:${atkType} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
+    addLog(`🔥 BATCH ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${actualTotal}`);
     resetStats();
     stats.total = actualTotal;
     stats.startTime = Date.now();
@@ -265,7 +298,6 @@ async function runBatchAttack() {
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
-    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     const headers = parseHeaders();
@@ -291,6 +323,9 @@ async function runBatchAttack() {
         });
         const data = await res.json();
         if (data.success) {
+            // Tampilkan tabel hasil batch
+            const batchHtml = formatBatchResult(data);
+            addTableStat('📊 BATCH RESULT', batchHtml);
             if (forceSuccessCheck.checked) {
                 stats.success = data.totalRequests;
                 stats.totalBytes = data.totalBytes;
@@ -313,33 +348,31 @@ async function runBatchAttack() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
-        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
     }
 }
 
-async function runAutocannon() {
+async function runAutocannonAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
     if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
-    let connections = parseInt(concurrencyInput.value);
-    let duration = Math.floor(parseInt(timeoutInput.value) / 1000);
-    if (duration < 1) duration = 1;
-    if (duration > 10) duration = 10;
-    const amount = Math.min(parseInt(totalInput.value), 5000);
+    let total = Math.min(parseInt(totalInput.value), 5000);
+    let concurrency = Math.min(parseInt(concurrencyInput.value), 100);
+    let duration = Math.min(Math.floor(parseInt(timeoutInput.value) / 1000), 9);
+    if (duration <= 0) duration = 5;
     
-    addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${connections} | Duration:${duration}s | Amount:${amount}`);
+    addLog(`🚀 AUTOCANNON | ${mtd} ${url} | Connections:${concurrency} | Duration:${duration}s | Total:${total}`);
     resetStats();
+    stats.total = total;
     stats.startTime = Date.now();
     isRunning = true;
     abortController = new AbortController();
     startBtn.disabled = true;
     batchBtn.disabled = true;
-    autocannonBtn.disabled = true;
     stopBtn.disabled = false;
     
     const headers = parseHeaders();
@@ -353,27 +386,31 @@ async function runAutocannon() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 url, method: mtd, headers, body: "",
-                connections, duration, amount
+                connections: concurrency,
+                duration: duration,
+                amount: total,
             }),
             signal: abortController.signal
         });
         const data = await res.json();
         if (data.success) {
-            addLog(`✅ AUTOCANNON completed`);
-            if (data.result) {
-                let statsMsg = `Total:${data.result.requests?.total || 0} | Complete:${data.result.requests?.completed || 0} | Errors:${data.result.errors || 0}`;
-                if (data.result.latency) statsMsg += ` | Avg Latency:${data.result.latency.average?.toFixed(0) || '?'}ms`;
-                addLog(`📊 Result: ${statsMsg}`);
-                stats.total = data.result.requests?.total || 0;
-                stats.success = data.result.requests?.completed || 0;
-                stats.fail = data.result.errors || 0;
-                stats.times = data.result.latency?.values || [];
+            const result = data.result;
+            // Tampilkan tabel statistik
+            const tableHtml = formatAutocannonResult(result);
+            addTableStat('📈 AUTOCANNON RESULT', tableHtml);
+            // Update stats summary
+            if (result.requests) {
+                stats.total = result.requests.total || total;
+                stats.success = result.requests.completed || 0;
+                stats.fail = result.errors || 0;
+                stats.totalBytes = result.throughput?.total || 0;
+                stats.times = result.latency?.values || [];
                 updateUI();
             }
-            rawResponsePreview.innerText = `AutoCannon completed`;
+            addLog(`✅ Autocannon finished: ${result.requests?.completed || 0}/${result.requests?.total || total} success`);
+            rawResponsePreview.innerText = `Autocannon: ${result.requests?.completed || 0}/${result.requests?.total || total} success, RPS: ${result.requests?.average?.toFixed(2) || 0}`;
         } else {
-            addLog(`❌ AutoCannon gagal: ${data.error}`, true);
-            rawResponsePreview.innerText = `AutoCannon error: ${data.error}`;
+            addLog(`❌ Autocannon failed: ${data.error}`, true);
         }
     } catch(e) {
         if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
@@ -381,7 +418,6 @@ async function runAutocannon() {
         isRunning = false;
         startBtn.disabled = false;
         batchBtn.disabled = false;
-        autocannonBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
         updateUI();
@@ -395,7 +431,6 @@ function stopAttack() {
         stopBtn.disabled = true;
         startBtn.disabled = false;
         batchBtn.disabled = false;
-        autocannonBtn.disabled = false;
         isRunning = false;
     } else {
         addLog("No attack running", true);
@@ -414,6 +449,18 @@ function exportCSV() {
     link.click();
     addLog("CSV exported");
 }
+
+// ======================== Event Listeners ========================
+startBtn.addEventListener('click', runSingleAttack);
+batchBtn.addEventListener('click', runBatchAttack);
+// Tambahkan event untuk tombol Autocannon (jika ada di HTML)
+// Pastikan tombol dengan id "btnAutocannon" ada di HTML
+const btnAutocannon = document.getElementById('btnAutocannon');
+if (btnAutocannon) {
+    btnAutocannon.addEventListener('click', runAutocannonAttack);
+}
+stopBtn.addEventListener('click', stopAttack);
+exportBtn.addEventListener('click', exportCSV);
 
 // ======================== Health & Preview ========================
 async function checkTargetHealth(url) {
@@ -460,13 +507,6 @@ function startHeartbeat() {
     heartbeatInterval = setInterval(updateActiveUsers, 30000);
     updateActiveUsers();
 }
-
-// ======================== Event Listeners ========================
-startBtn.addEventListener('click', runSingleAttack);
-batchBtn.addEventListener('click', runBatchAttack);
-autocannonBtn.addEventListener('click', runAutocannon);
-stopBtn.addEventListener('click', stopAttack);
-exportBtn.addEventListener('click', exportCSV);
 
 // ======================== Initialization ========================
 window.onload = () => {
