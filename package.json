@@ -1,7 +1,7 @@
 {
-  "name": "loadtest-web",
+  "name": "loadtest-elysia",
   "version": "1.0.0",
-  "description": "Ultimate Load Testing Tool",
+  "type": "module",
   "scripts": {
     "dev": "node api/attack.js",
     "start": "node api/attack.js"
