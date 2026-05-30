@@ -1,6 +1,6 @@
-import express from 'express';
-import autocannon from 'autocannon';
-import cors from 'cors';
+const express = require('express');
+const autocannon = require('autocannon');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
@@ -37,7 +37,7 @@ app.post('/api/attack', async (req, res) => {
     const work = parseInt(workers) || 1;
 
     if (dur > 60) {
-      console.warn(`⚠️ Duration ${dur}s may exceed Vercel function timeout (max 60s).`);
+      console.warn(`Duration ${dur}s may exceed Vercel function timeout.`);
     }
 
     const result = await runLoadTest({
@@ -61,14 +61,14 @@ app.post('/api/attack', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Attack error:', err);
+    console.error(err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-export default app;
+module.exports = app;
