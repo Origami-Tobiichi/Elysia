@@ -10,32 +10,39 @@
     .container { max-width: 1200px; margin: auto; }
     h1 { text-align: center; margin-bottom: 20px; text-shadow: 0 0 5px #0f0; }
     .card { background: #111; border: 1px solid #0f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-    input, button { background: #222; border: 1px solid #0f0; color: #0f0; padding: 10px; margin: 5px; border-radius: 5px; }
+    input, button { background: #222; border: 1px solid #0f0; color: #0f0; padding: 10px; margin: 5px; border-radius: 5px; font-family: monospace; }
     button { cursor: pointer; font-weight: bold; }
     button:hover { background: #0f0; color: #000; }
     .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-top: 20px; }
     .stat { background: #000; padding: 10px; text-align: center; border: 1px solid #0f0; }
-    .log { background: #000; border: 1px solid #0f0; height: 250px; overflow-y: scroll; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 20px; }
-    .log p { margin: 2px 0; }
+    .log { background: #000; border: 1px solid #0f0; height: 500px; overflow-y: scroll; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 20px; white-space: pre-wrap; }
+    .log p { margin: 2px 0; font-family: monospace; }
     .stop-btn { background: #f00; color: #fff; border-color: #f00; }
     .stop-btn:hover { background: #a00; }
+    input { width: 100%; margin-bottom: 10px; }
+    .form-row { display: flex; gap: 10px; }
+    .form-row input { flex: 1; }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>💀 BLACK PHANTOM LOAD TESTER 💀</h1>
   <div class="card">
-    <label>Target URL:</label><br>
-    <input type="text" id="url" value="https://example.com" style="width: 100%;"><br>
-    <label>Connections (1-10000):</label><input type="number" id="connections" value="100"><br>
-    <label>Duration (seconds):</label><input type="number" id="duration" value="10"><br>
-    <label>Pipelining (1-10):</label><input type="number" id="pipelining" value="1"><br>
-    <label>Workers (1-4):</label><input type="number" id="workers" value="1"><br>
+    <label>Target URL:</label>
+    <input type="text" id="url" value="https://example.com">
+    <div class="form-row">
+      <input type="number" id="connections" placeholder="Connections" value="100">
+      <input type="number" id="duration" placeholder="Duration (s)" value="10">
+    </div>
+    <div class="form-row">
+      <input type="number" id="pipelining" placeholder="Pipelining" value="1">
+      <input type="number" id="workers" placeholder="Workers" value="1">
+    </div>
     <button id="attackBtn">🔥 LAUNCH ATTACK</button>
     <button id="stopBtn" class="stop-btn" disabled>⏹ STOP ATTACK</button>
   </div>
   <div id="result" style="display:none;" class="card">
-    <h2>📊 RESULT</h2>
+    <h2>📊 FINAL STATISTICS</h2>
     <div class="stats">
       <div class="stat">Total Requests<br><span id="total">0</span></div>
       <div class="stat">Avg RPS<br><span id="rps">0</span></div>
@@ -52,44 +59,39 @@
   </div>
 </div>
 <script>
+  let eventSource = null;
+  let attackInProgress = false;
+
   const attackBtn = document.getElementById('attackBtn');
   const stopBtn = document.getElementById('stopBtn');
   const resultDiv = document.getElementById('result');
   const logDiv = document.getElementById('log');
-  let eventSource = null;
 
   function addLog(msg) {
     const p = document.createElement('p');
-    p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+    p.textContent = msg;
     logDiv.appendChild(p);
     logDiv.scrollTop = logDiv.scrollHeight;
   }
 
-  // Setup SSE untuk live log
   function setupEventSource() {
     if (eventSource) eventSource.close();
     eventSource = new EventSource('/api/stream');
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data);
-      if (data.type === 'start') addLog(data.message);
-      else if (data.type === 'progress') {
-        addLog(`📊 Requests: ${data.requests} | RPS: ${data.rps} | Errors: ${data.errors}`);
-      } else if (data.type === 'done') {
-        addLog('✅ Attack completed successfully.');
-        stopBtn.disabled = true;
-        attackBtn.disabled = false;
-      } else if (data.type === 'stop') {
+      if (data.type === 'log') {
         addLog(data.message);
-        stopBtn.disabled = true;
-        attackBtn.disabled = false;
+      } else if (data.type === 'done') {
+        addLog('✅ Attack completed. Fetching final stats...');
       }
     };
     eventSource.onerror = () => {
-      addLog('⚠️ SSE connection lost, but attack may still be running.');
+      addLog('⚠️ Live log connection lost. Attack may still be running.');
     };
   }
 
   attackBtn.onclick = async () => {
+    if (attackInProgress) return;
     const url = document.getElementById('url').value.trim();
     if (!url) return addLog('❌ URL kosong!');
     const connections = document.getElementById('connections').value;
@@ -99,8 +101,9 @@
     attackBtn.disabled = true;
     stopBtn.disabled = false;
     resultDiv.style.display = 'none';
+    attackInProgress = true;
     addLog(`🚀 Sending attack request to ${url} (conn=${connections}, dur=${duration}s)`);
-    setupEventSource(); // start listening to live logs
+    setupEventSource();
     try {
       const response = await fetch('/api/attack', {
         method: 'POST',
@@ -111,19 +114,15 @@
       if (data.success) {
         addLog('✅ Attack finished. Displaying final stats.');
         displayResults(data.stats);
-        stopBtn.disabled = true;
-        attackBtn.disabled = false;
-        if (eventSource) eventSource.close();
       } else {
         addLog(`❌ Error: ${data.error}`);
-        stopBtn.disabled = true;
-        attackBtn.disabled = false;
-        if (eventSource) eventSource.close();
       }
     } catch (err) {
-      addLog(`❌ Request gagal: ${err.message}`);
-      stopBtn.disabled = true;
+      addLog(`❌ Request failed: ${err.message}`);
+    } finally {
+      attackInProgress = false;
       attackBtn.disabled = false;
+      stopBtn.disabled = true;
       if (eventSource) eventSource.close();
     }
   };
@@ -133,12 +132,13 @@
     try {
       const res = await fetch('/api/stop', { method: 'POST' });
       const data = await res.json();
-      addLog(data.message);
+      addLog(data.message || 'Stopped');
     } catch (err) {
       addLog(`❌ Stop failed: ${err.message}`);
     } finally {
-      stopBtn.disabled = true;
+      attackInProgress = false;
       attackBtn.disabled = false;
+      stopBtn.disabled = true;
     }
   };
 
