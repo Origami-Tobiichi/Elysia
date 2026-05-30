@@ -9,9 +9,8 @@ app.use(express.json());
 
 let activeInstance = null;
 let sseClients = [];
-let currentStats = { requests: 0, errors: 0, rps: 0, avgLatency: 0, maxLatency: 0, p99: 0, throughput: 0 };
 
-// SSE endpoint untuk live log dan live stats
+// SSE endpoint untuk live log
 app.get('/api/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -30,17 +29,8 @@ function sendEvent(data) {
   });
 }
 
-function runAttack(params) {
+function runAttack(params, onProgress) {
   return new Promise((resolve, reject) => {
-    const outputStream = new PassThrough();
-    outputStream.on('data', chunk => {
-      const text = chunk.toString();
-      // Kirim setiap baris sebagai live log
-      text.split('\n').forEach(line => {
-        if (line.trim()) sendEvent({ type: 'log', message: line });
-      });
-    });
-
     const instance = autocannon({
       url: params.url,
       connections: params.connections,
@@ -53,31 +43,30 @@ function runAttack(params) {
     });
 
     activeInstance = instance;
-    autocannon.track(instance, { outputStream, renderProgressBar: true, renderResultsTable: true });
 
-    // Update live stats setiap 500ms
+    // Progress setiap 500ms
+    let lastRequests = 0;
     const interval = setInterval(() => {
       if (!activeInstance || activeInstance !== instance) {
         clearInterval(interval);
         return;
       }
       const requests = instance.requestsCompleted || 0;
+      const rps = (requests - lastRequests) * 2;
+      lastRequests = requests;
       const errors = instance.errors || 0;
-      const elapsed = (Date.now() - instance.startTime) / 1000 || 1;
-      const rps = Math.floor(requests / elapsed);
-      // Untuk throughput, estimasi sederhana (8KB per request)
-      const throughput = (requests * 8) / 1024 / elapsed; // MB/s
-      currentStats = {
-        requests,
-        errors,
-        rps,
-        avgLatency: 0, // tidak bisa real-time dari autocannon secara langsung, kita update di akhir saja
-        maxLatency: 0,
-        p99: 0,
-        throughput: throughput.toFixed(2)
-      };
-      sendEvent({ type: 'stats', stats: currentStats });
+      onProgress({ requests, rps, errors });
     }, 500);
+
+    // Tangkap output autocannon (termasuk tabel)
+    const outputStream = new PassThrough();
+    outputStream.on('data', chunk => {
+      const text = chunk.toString();
+      text.split('\n').forEach(line => {
+        if (line.trim()) sendEvent({ type: 'log', message: line });
+      });
+    });
+    autocannon.track(instance, { outputStream, renderProgressBar: true, renderResultsTable: true });
 
     instance.on('done', () => {
       clearInterval(interval);
@@ -93,14 +82,23 @@ app.post('/api/attack', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'URL required' });
     if (activeInstance) return res.status(409).json({ error: 'Attack already running' });
 
+    let dur = parseInt(duration) || 10;
+    const MAX_DURATION = 60; // Vercel hobby limit
+    if (dur > MAX_DURATION) {
+      sendEvent({ type: 'log', message: `⚠️ Duration ${dur}s exceeds Vercel limit (${MAX_DURATION}s). Limiting to ${MAX_DURATION}s.` });
+      dur = MAX_DURATION;
+    }
     const conn = Math.min(parseInt(connections) || 100, 10000);
-    const dur = parseInt(duration) || 10;
     const pipe = parseInt(pipelining) || 1;
     const work = parseInt(workers) || 1;
 
     sendEvent({ type: 'log', message: `🚀 Starting attack on ${url} (${conn} connections, ${dur}s)` });
 
-    const result = await runAttack({ url, connections: conn, duration: dur, pipelining: pipe, workers: work });
+    let progressStats = { requests: 0, rps: 0, errors: 0 };
+    const result = await runAttack({ url, connections: conn, duration: dur, pipelining: pipe, workers: work }, (progress) => {
+      progressStats = progress;
+      sendEvent({ type: 'stats', stats: progressStats });
+    });
 
     res.json({
       success: true,
