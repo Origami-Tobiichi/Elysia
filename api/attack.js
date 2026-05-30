@@ -1,6 +1,6 @@
-import express from 'express';
-import autocannon from 'autocannon';
-import cors from 'cors';
+const express = require('express');
+const autocannon = require('autocannon');
+const cors = require('cors');
 
 const app = express();
 app.use(cors());
@@ -31,13 +31,14 @@ app.post('/api/attack', async (req, res) => {
     if (!url) {
       return res.status(400).json({ error: 'URL is required' });
     }
+
     const conn = Math.min(parseInt(connections) || 100, 10000);
     const dur = parseInt(duration) || 10;
     const pipe = parseInt(pipelining) || 1;
     const work = parseInt(workers) || 1;
 
     if (dur > 60) {
-      console.warn(`Duration ${dur}s may exceed Vercel function timeout.`);
+      console.warn(`Duration ${dur}s may exceed Vercel function timeout (max 60s).`);
     }
 
     const result = await runLoadTest({
@@ -61,7 +62,7 @@ app.post('/api/attack', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error('Attack error:', err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
@@ -71,4 +72,4 @@ if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
-export default app;
+module.exports = app;
