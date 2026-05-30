@@ -1,22 +1,14 @@
 {
-  "name": "loadtest-elysia",
+  "name": "loadtest-web",
   "version": "1.0.0",
-  "description": "Ultimate Load Testing Tool - TypeScript",
-  "type": "module",
+  "description": "Ultimate Load Testing Tool",
   "scripts": {
-    "dev": "node --loader ts-node/esm api/attack.ts",
-    "build": "tsc",
-    "start": "node dist/api/attack.js"
+    "dev": "node api/attack.js",
+    "start": "node api/attack.js"
   },
   "dependencies": {
     "express": "^4.18.2",
     "autocannon": "^7.15.0",
-    "cors": "^2.8.5",
-    "@types/express": "^4.17.21",
-    "@types/cors": "^2.8.17",
-    "@types/node": "^20.12.12"
-  },
-  "devDependencies": {
-    "typescript": "^5.4.5"
+    "cors": "^2.8.5"
   }
 }
