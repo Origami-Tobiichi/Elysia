@@ -10,7 +10,7 @@ app.use(express.json());
 let activeInstance = null;
 let sseClients = [];
 
-// SSE endpoint untuk live log
+// Endpoint Server-Sent Events untuk live log
 app.get('/api/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -34,7 +34,7 @@ function runAttack(params) {
     const outputStream = new PassThrough();
     outputStream.on('data', chunk => {
       const text = chunk.toString();
-      // Kirim setiap baris ke client
+      // Kirim setiap baris ke client (termasuk tabel, warning, progress)
       text.split('\n').forEach(line => {
         if (line.trim()) sendEvent({ type: 'log', message: line });
       });
@@ -52,6 +52,7 @@ function runAttack(params) {
     });
 
     activeInstance = instance;
+    // Track progress dan kirim ke outputStream
     autocannon.track(instance, { outputStream, renderProgressBar: true, renderResultsTable: true });
 
     instance.on('done', () => {
