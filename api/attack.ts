@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import autocannon from 'autocannon';
 import cors from 'cors';
 
@@ -6,7 +6,34 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-function runLoadTest(params) {
+// Tipe untuk parameter load test
+interface LoadTestParams {
+  url: string;
+  connections: number;
+  duration: number;
+  pipelining: number;
+  workers: number;
+}
+
+// Tipe untuk hasil autocannon (sesuai dokumentasi)
+interface AutocannonResult {
+  requests: {
+    total: number;
+    average: number;
+  };
+  latency: {
+    average: number;
+    max: number;
+    p99: number;
+  };
+  throughput: {
+    average: number;
+  };
+  errors: number;
+}
+
+// Fungsi untuk menjalankan autocannon dengan Promise
+function runLoadTest(params: LoadTestParams): Promise<AutocannonResult> {
   return new Promise((resolve, reject) => {
     const instance = autocannon(
       {
@@ -16,7 +43,7 @@ function runLoadTest(params) {
         pipelining: params.pipelining,
         workers: params.workers,
       },
-      (err, result) => {
+      (err: Error | null, result: AutocannonResult) => {
         if (err) reject(err);
         else resolve(result);
       }
@@ -25,19 +52,21 @@ function runLoadTest(params) {
   });
 }
 
-app.post('/api/attack', async (req, res) => {
+app.post('/api/attack', async (req: Request, res: Response) => {
   try {
     const { url, connections, duration, pipelining, workers } = req.body;
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Valid URL is required' });
     }
+
     const conn = Math.min(parseInt(connections) || 100, 10000);
     const dur = parseInt(duration) || 10;
     const pipe = parseInt(pipelining) || 1;
     const work = parseInt(workers) || 1;
 
     if (dur > 60) {
-      console.warn(`Duration ${dur}s may exceed Vercel function timeout.`);
+      console.warn(`⚠️ Duration ${dur}s may exceed Vercel function timeout (max 60s).`);
     }
 
     const result = await runLoadTest({
@@ -51,25 +80,26 @@ app.post('/api/attack', async (req, res) => {
     res.json({
       success: true,
       stats: {
-        requests: result.requests?.total || 0,
-        avgRps: result.requests?.average || 0,
-        avgLatency: result.latency?.average || 0,
-        maxLatency: result.latency?.max || 0,
-        p99: result.latency?.p99 || 0,
-        errors: result.errors || 0,
-        throughput: result.throughput?.average || 0,
+        requests: result.requests.total,
+        avgRps: result.requests.average,
+        avgLatency: result.latency.average,
+        maxLatency: result.latency.max,
+        p99: result.latency.p99,
+        errors: result.errors,
+        throughput: result.throughput.average,
       },
     });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message || 'Internal server error' });
+  } catch (err: unknown) {
+    console.error('Attack error:', err);
+    const errorMessage = err instanceof Error ? err.message : 'Internal server error';
+    res.status(500).json({ error: errorMessage });
   }
 });
 
-// Untuk local development (opsional)
+// Untuk local development
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
 }
 
 export default app;
