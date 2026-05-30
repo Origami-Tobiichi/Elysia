@@ -58,7 +58,7 @@ function runAttack(params, onProgress) {
       onProgress({ requests, rps, errors });
     }, 500);
 
-    // Tangkap output autocannon (termasuk tabel)
+    // Tangkap semua output autocannon (termasuk tabel)
     const outputStream = new PassThrough();
     outputStream.on('data', chunk => {
       const text = chunk.toString();
@@ -83,7 +83,7 @@ app.post('/api/attack', async (req, res) => {
     if (activeInstance) return res.status(409).json({ error: 'Attack already running' });
 
     let dur = parseInt(duration) || 10;
-    const MAX_DURATION = 60; // Vercel hobby limit
+    const MAX_DURATION = 60; // Vercel limit
     if (dur > MAX_DURATION) {
       sendEvent({ type: 'log', message: `⚠️ Duration ${dur}s exceeds Vercel limit (${MAX_DURATION}s). Limiting to ${MAX_DURATION}s.` });
       dur = MAX_DURATION;
