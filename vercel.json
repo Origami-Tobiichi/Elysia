@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/attack.ts",
+      "src": "api/attack.js",
       "use": "@vercel/node"
     },
     {
