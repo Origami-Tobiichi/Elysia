@@ -1,4 +1,4 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import autocannon from 'autocannon';
 import cors from 'cors';
 
@@ -6,15 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-interface AttackParams {
-  url: string;
-  connections: number;
-  duration: number;
-  pipelining: number;
-  workers: number;
-}
-
-function runLoadTest(params: AttackParams): Promise<any> {
+function runLoadTest(params) {
   return new Promise((resolve, reject) => {
     const instance = autocannon(
       {
@@ -33,13 +25,12 @@ function runLoadTest(params: AttackParams): Promise<any> {
   });
 }
 
-app.post('/api/attack', async (req: Request, res: Response) => {
+app.post('/api/attack', async (req, res) => {
   try {
     const { url, connections, duration, pipelining, workers } = req.body;
     if (!url) {
       return res.status(400).json({ error: 'URL is required' });
     }
-
     const conn = Math.min(parseInt(connections) || 100, 10000);
     const dur = parseInt(duration) || 10;
     const pipe = parseInt(pipelining) || 1;
@@ -49,7 +40,7 @@ app.post('/api/attack', async (req: Request, res: Response) => {
       console.warn(`Duration ${dur}s may exceed Vercel function timeout.`);
     }
 
-    const result: any = await runLoadTest({
+    const result = await runLoadTest({
       url,
       connections: conn,
       duration: dur,
@@ -69,13 +60,13 @@ app.post('/api/attack', async (req: Request, res: Response) => {
         throughput: result.throughput?.average || 0,
       },
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Internal server error' });
   }
 });
 
-// Untuk local development
+// Untuk local development (opsional)
 const PORT = process.env.PORT || 3000;
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
