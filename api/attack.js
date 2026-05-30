@@ -9,8 +9,9 @@ app.use(express.json());
 
 let activeInstance = null;
 let sseClients = [];
+let currentStats = { requests: 0, errors: 0, rps: 0, avgLatency: 0, maxLatency: 0, p99: 0, throughput: 0 };
 
-// Endpoint Server-Sent Events untuk live log
+// SSE endpoint untuk live log dan live stats
 app.get('/api/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -34,7 +35,7 @@ function runAttack(params) {
     const outputStream = new PassThrough();
     outputStream.on('data', chunk => {
       const text = chunk.toString();
-      // Kirim setiap baris ke client (termasuk tabel, warning, progress)
+      // Kirim setiap baris sebagai live log
       text.split('\n').forEach(line => {
         if (line.trim()) sendEvent({ type: 'log', message: line });
       });
@@ -52,10 +53,34 @@ function runAttack(params) {
     });
 
     activeInstance = instance;
-    // Track progress dan kirim ke outputStream
     autocannon.track(instance, { outputStream, renderProgressBar: true, renderResultsTable: true });
 
+    // Update live stats setiap 500ms
+    const interval = setInterval(() => {
+      if (!activeInstance || activeInstance !== instance) {
+        clearInterval(interval);
+        return;
+      }
+      const requests = instance.requestsCompleted || 0;
+      const errors = instance.errors || 0;
+      const elapsed = (Date.now() - instance.startTime) / 1000 || 1;
+      const rps = Math.floor(requests / elapsed);
+      // Untuk throughput, estimasi sederhana (8KB per request)
+      const throughput = (requests * 8) / 1024 / elapsed; // MB/s
+      currentStats = {
+        requests,
+        errors,
+        rps,
+        avgLatency: 0, // tidak bisa real-time dari autocannon secara langsung, kita update di akhir saja
+        maxLatency: 0,
+        p99: 0,
+        throughput: throughput.toFixed(2)
+      };
+      sendEvent({ type: 'stats', stats: currentStats });
+    }, 500);
+
     instance.on('done', () => {
+      clearInterval(interval);
       activeInstance = null;
       sendEvent({ type: 'done' });
     });
