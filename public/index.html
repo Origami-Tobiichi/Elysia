@@ -7,15 +7,17 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #0a0a0a; font-family: 'Courier New', monospace; color: #0f0; padding: 20px; }
-    .container { max-width: 1200px; margin: auto; }
+    .container { max-width: 1400px; margin: auto; }
     h1 { text-align: center; margin-bottom: 20px; text-shadow: 0 0 5px #0f0; }
     .card { background: #111; border: 1px solid #0f0; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
     input, button { background: #222; border: 1px solid #0f0; color: #0f0; padding: 10px; margin: 5px; border-radius: 5px; font-family: monospace; }
     button { cursor: pointer; font-weight: bold; }
     button:hover { background: #0f0; color: #000; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-top: 20px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 10px; margin-bottom: 20px; }
     .stat { background: #000; padding: 10px; text-align: center; border: 1px solid #0f0; }
-    .log { background: #000; border: 1px solid #0f0; height: 500px; overflow-y: scroll; padding: 10px; font-family: monospace; font-size: 12px; margin-top: 20px; white-space: pre-wrap; }
+    .stat-label { font-size: 12px; text-transform: uppercase; }
+    .stat-value { font-size: 24px; font-weight: bold; }
+    .log { background: #000; border: 1px solid #0f0; height: 400px; overflow-y: scroll; padding: 10px; font-family: monospace; font-size: 12px; white-space: pre-wrap; }
     .log p { margin: 2px 0; font-family: monospace; }
     .stop-btn { background: #f00; color: #fff; border-color: #f00; }
     .stop-btn:hover { background: #a00; }
@@ -41,16 +43,25 @@
     <button id="attackBtn">🔥 LAUNCH ATTACK</button>
     <button id="stopBtn" class="stop-btn" disabled>⏹ STOP ATTACK</button>
   </div>
-  <div id="result" style="display:none;" class="card">
-    <h2>📊 FINAL STATISTICS</h2>
-    <div class="stats">
-      <div class="stat">Total Requests<br><span id="total">0</span></div>
-      <div class="stat">Avg RPS<br><span id="rps">0</span></div>
-      <div class="stat">Avg Latency<br><span id="avgLat">0 ms</span></div>
-      <div class="stat">Max Latency<br><span id="maxLat">0 ms</span></div>
-      <div class="stat">p99 Latency<br><span id="p99">0 ms</span></div>
-      <div class="stat">Errors<br><span id="errors">0</span></div>
-      <div class="stat">Throughput<br><span id="throughput">0 MB/s</span></div>
+  <div class="card">
+    <h2>📊 LIVE STATISTICS</h2>
+    <div class="stats-grid">
+      <div class="stat"><div class="stat-label">Total Requests</div><div class="stat-value" id="liveRequests">0</div></div>
+      <div class="stat"><div class="stat-label">Errors</div><div class="stat-value" id="liveErrors">0</div></div>
+      <div class="stat"><div class="stat-label">RPS</div><div class="stat-value" id="liveRps">0</div></div>
+      <div class="stat"><div class="stat-label">Throughput</div><div class="stat-value" id="liveThroughput">0 MB/s</div></div>
+    </div>
+    <div id="finalStats" style="display:none; margin-top:20px;">
+      <h3>🎯 Final Statistics (from autocannon)</h3>
+      <div class="stats-grid">
+        <div class="stat"><div class="stat-label">Total Requests</div><div class="stat-value" id="finalRequests">0</div></div>
+        <div class="stat"><div class="stat-label">Avg RPS</div><div class="stat-value" id="finalRps">0</div></div>
+        <div class="stat"><div class="stat-label">Avg Latency</div><div class="stat-value" id="finalAvgLat">0 ms</div></div>
+        <div class="stat"><div class="stat-label">Max Latency</div><div class="stat-value" id="finalMaxLat">0 ms</div></div>
+        <div class="stat"><div class="stat-label">p99 Latency</div><div class="stat-value" id="finalP99">0 ms</div></div>
+        <div class="stat"><div class="stat-label">Errors</div><div class="stat-value" id="finalErrors">0</div></div>
+        <div class="stat"><div class="stat-label">Throughput</div><div class="stat-value" id="finalThroughput">0 MB/s</div></div>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -64,7 +75,6 @@
 
   const attackBtn = document.getElementById('attackBtn');
   const stopBtn = document.getElementById('stopBtn');
-  const resultDiv = document.getElementById('result');
   const logDiv = document.getElementById('log');
 
   function addLog(msg) {
@@ -74,6 +84,25 @@
     logDiv.scrollTop = logDiv.scrollHeight;
   }
 
+  function updateLiveStats(stats) {
+    document.getElementById('liveRequests').innerText = stats.requests.toLocaleString();
+    document.getElementById('liveErrors').innerText = stats.errors;
+    document.getElementById('liveRps').innerText = stats.rps;
+    document.getElementById('liveThroughput').innerText = stats.throughput + ' MB/s';
+  }
+
+  function displayFinalStats(stats) {
+    document.getElementById('finalRequests').innerText = stats.requests.toLocaleString();
+    document.getElementById('finalRps').innerText = Math.round(stats.avgRps);
+    document.getElementById('finalAvgLat').innerText = Math.round(stats.avgLatency) + ' ms';
+    document.getElementById('finalMaxLat').innerText = Math.round(stats.maxLatency) + ' ms';
+    document.getElementById('finalP99').innerText = Math.round(stats.p99) + ' ms';
+    document.getElementById('finalErrors').innerText = stats.errors;
+    const mbps = (stats.throughput / 1024 / 1024).toFixed(2);
+    document.getElementById('finalThroughput').innerText = mbps + ' MB/s';
+    document.getElementById('finalStats').style.display = 'block';
+  }
+
   function setupEventSource() {
     if (eventSource) eventSource.close();
     eventSource = new EventSource('/api/stream');
@@ -81,8 +110,10 @@
       const data = JSON.parse(event.data);
       if (data.type === 'log') {
         addLog(data.message);
+      } else if (data.type === 'stats') {
+        updateLiveStats(data.stats);
       } else if (data.type === 'done') {
-        addLog('✅ Attack completed. Fetching final stats...');
+        addLog('✅ Attack completed. Fetching final statistics...');
       }
     };
     eventSource.onerror = () => {
@@ -100,7 +131,7 @@
     const workers = document.getElementById('workers').value;
     attackBtn.disabled = true;
     stopBtn.disabled = false;
-    resultDiv.style.display = 'none';
+    document.getElementById('finalStats').style.display = 'none';
     attackInProgress = true;
     addLog(`🚀 Sending attack request to ${url} (conn=${connections}, dur=${duration}s)`);
     setupEventSource();
@@ -113,7 +144,7 @@
       const data = await response.json();
       if (data.success) {
         addLog('✅ Attack finished. Displaying final stats.');
-        displayResults(data.stats);
+        displayFinalStats(data.stats);
       } else {
         addLog(`❌ Error: ${data.error}`);
       }
@@ -124,6 +155,8 @@
       attackBtn.disabled = false;
       stopBtn.disabled = true;
       if (eventSource) eventSource.close();
+      // Reset live stats after attack (optional)
+      updateLiveStats({ requests: 0, errors: 0, rps: 0, throughput: 0 });
     }
   };
 
@@ -141,18 +174,6 @@
       stopBtn.disabled = true;
     }
   };
-
-  function displayResults(stats) {
-    document.getElementById('total').innerText = stats.requests.toLocaleString();
-    document.getElementById('rps').innerText = Math.round(stats.avgRps);
-    document.getElementById('avgLat').innerText = Math.round(stats.avgLatency) + ' ms';
-    document.getElementById('maxLat').innerText = Math.round(stats.maxLatency) + ' ms';
-    document.getElementById('p99').innerText = Math.round(stats.p99) + ' ms';
-    document.getElementById('errors').innerText = stats.errors;
-    const mbps = (stats.throughput / 1024 / 1024).toFixed(2);
-    document.getElementById('throughput').innerText = mbps + ' MB/s';
-    resultDiv.style.display = 'block';
-  }
 </script>
 </body>
 </html>
