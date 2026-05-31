@@ -351,13 +351,13 @@ export const app = new Elysia()
     }),
   })
   .post('/api/bot/browserless', async ({ body }) => {
-    const { url, loop, intervalMs } = body;
+    const { url } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing API key' };
 
     try {
       const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
-        method: 'GET',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: `
@@ -368,8 +368,16 @@ export const app = new Elysia()
             await page.close();
           `,
         }),
+        redirect: 'manual',
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, error: `Browserless API error (${response.status}): ${errorText.substring(0, 200)}` };
+      }
+
       const result = await response.json();
+      if (result.error) return { success: false, error: result.error };
       return { success: true, result };
     } catch (err: any) {
       return { success: false, error: err.message };
