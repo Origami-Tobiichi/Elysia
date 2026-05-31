@@ -357,15 +357,9 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
+  // Endpoint browserless - menggunakan t.Object (bukan t.String)
   .post('/api/bot/browserless', async ({ body }) => {
-    // Karena frontend mengirim JSON, tetapi kadang ada error parse, kita tangani dengan manual
-    let params: any;
-    try {
-      params = JSON.parse(body as string);
-    } catch (e) {
-      return { success: false, error: 'Invalid JSON: ' + (body as string).substring(0, 100) };
-    }
-    const { url, loop, intervalMs } = params;
+    const { url, loop, intervalMs } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing API key' };
 
@@ -389,7 +383,11 @@ export const app = new Elysia()
       return { success: false, error: err.message };
     }
   }, {
-    body: t.String(),
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+    }),
   })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
