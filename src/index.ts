@@ -70,7 +70,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
-  // Attack type modifications
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -294,99 +293,84 @@ export const app = new Elysia()
   }))
   .post('/api/attack', async ({ body }) => {
     try {
-      const result = await singleAttack(body as SingleAttackParams);
+      let params: SingleAttackParams;
+      try {
+        params = JSON.parse(body as string);
+      } catch (e) {
+        return { success: false, error: 'Invalid JSON in request body', durationMs: 0 };
+      }
+      const result = await singleAttack(params);
       return result;
     } catch (err: any) {
       return { success: false, error: err.message, durationMs: 0 };
     }
   }, {
-    body: t.Object({
-      url: t.String(),
-      method: t.String(),
-      headers: t.Record(t.String(), t.String()),
-      body: t.String(),
-      timeout: t.Number(),
-      retryCount: t.Number(),
-      randomDelay: t.Number(),
-      keepAlive: t.Boolean(),
-      attackType: t.String(),
-      amplifyKB: t.Number(),
-      amplifyEnabled: t.Boolean(),
-      amplifyType: t.String(),
-    }),
+    body: t.String(),
   })
   .post('/api/batch', async ({ body }) => {
     try {
-      const result = await batchAttack(body as BatchAttackParams);
+      let params: BatchAttackParams;
+      try {
+        params = JSON.parse(body as string);
+      } catch (e) {
+        return { success: false, error: 'Invalid JSON in request body' };
+      }
+      const result = await batchAttack(params);
       return result;
     } catch (err: any) {
       return { success: false, error: err.message };
     }
   }, {
-    body: t.Object({
-      url: t.String(),
-      method: t.String(),
-      headers: t.Record(t.String(), t.String()),
-      body: t.String(),
-      timeout: t.Number(),
-      retryCount: t.Number(),
-      randomDelay: t.Number(),
-      keepAlive: t.Boolean(),
-      attackType: t.String(),
-      amplifyKB: t.Number(),
-      amplifyEnabled: t.Boolean(),
-      amplifyType: t.String(),
-      concurrency: t.Number(),
-      total: t.Number(),
-    }),
+    body: t.String(),
   })
   .post('/api/autocannon', async ({ body }) => {
     try {
-      const result = await runAutocannon(body as AutocannonOptions);
+      let params: AutocannonOptions;
+      try {
+        params = JSON.parse(body as string);
+      } catch (e) {
+        return { success: false, error: 'Invalid JSON in request body' };
+      }
+      const result = await runAutocannon(params);
       return { success: true, result };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
   }, {
-    body: t.Object({
-      url: t.String(),
-      connections: t.Number(),
-      duration: t.Number(),
-      amount: t.Optional(t.Number()),
-      method: t.Optional(t.String()),
-      headers: t.Optional(t.Record(t.String(), t.String())),
-      body: t.Optional(t.String()),
-    }),
+    body: t.String(),
   })
-  // Endpoint browser bot menggunakan Browserless.io
   .post('/api/bot/browserless', async ({ body }) => {
-    const { url, loop, intervalMs } = body as any;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+    try {
+      let params: { url: string; loop?: boolean; intervalMs?: number };
+      try {
+        params = JSON.parse(body as string);
+      } catch (e) {
+        return { success: false, error: 'Invalid JSON in request body' };
+      }
+      const { url, loop, intervalMs } = params;
+      const apiKey = process.env.BROWSERLESS_API_KEY;
+      if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    // Untuk loop, frontend perlu memanggil endpoint ini berulang kali.
-    // Kita hanya melakukan satu tindakan per panggilan.
-    const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: `
-          const page = await browser.newPage();
-          await page.goto('${url}', { waitUntil: 'networkidle2' });
-          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-          await page.waitForTimeout(2000);
-          await page.close();
-        `,
-      }),
-    });
-    const result = await response.json();
-    return { success: true, result };
+      const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: `
+            const page = await browser.newPage();
+            await page.goto('${url}', { waitUntil: 'networkidle2' });
+            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+            await page.waitForTimeout(2000);
+            await page.close();
+          `,
+        }),
+      });
+      const result = await response.json();
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
   }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
+    body: t.String(),
   })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
