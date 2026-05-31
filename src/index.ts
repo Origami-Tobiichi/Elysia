@@ -355,20 +355,20 @@ export const app = new Elysia()
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing API key' };
 
+    // Kode JavaScript yang valid untuk Browserless
+    const code = `
+      const page = await browser.newPage();
+      await page.goto('${url}', { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2000);
+      await page.close();
+    `;
+
     try {
       const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: `
-            const page = await browser.newPage();
-            await page.goto('${url}', { waitUntil: 'networkidle2' });
-            await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-            await page.waitForTimeout(2000);
-            await page.close();
-          `,
-        }),
-        redirect: 'manual',
+        body: JSON.stringify({ code }),
       });
 
       if (!response.ok) {
