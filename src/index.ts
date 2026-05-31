@@ -356,50 +356,32 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // ==================== BROWSERLESS BOT (diperkuat) ====================
-  .post('/api/bot/browserless', async ({ body }) => {
-    const { url } = body;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+// ==================== BROWSERLESS BOT (dengan retry dan timeout) ====================
+.post('/api/bot/browserless', async ({ body }) => {
+  const { url } = body;
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) return { success: false, error: 'Missing API key. Set BROWSERLESS_API_KEY in environment.' };
 
-    // Script yang lebih agresif dan stabil (menggunakan module.exports)
-    const script = `
+  // Script minimal yang stabil (tidak ada navigasi berlebihan)
+  const script = `
 module.exports = async ({ page, context }) => {
-  const targetUrl = context.url;
-  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-  // Scroll banyak
-  await page.evaluate(async () => {
-    let totalHeight = 0;
-    let distance = 1000;
-    while (totalHeight < document.body.scrollHeight) {
-      window.scrollBy(0, distance);
-      totalHeight += distance;
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-  });
-  // Klik semua link (maks 30) – lebih agresif
-  const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
-  const uniqueLinks = [...new Set(links)].slice(0, 30);
-  for (const link of uniqueLinks) {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(500);
-    await page.goBack().catch(() => {});
-  }
-  // Kembali ke halaman awal
-  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
+  await page.goto(context.url, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await new Promise(resolve => setTimeout(resolve, 2000));
   const title = await page.title();
   return {
     data: {
       ok: true,
       title,
-      url: targetUrl,
-      linksClicked: uniqueLinks.length,
+      url: context.url,
     },
     type: 'application/json'
   };
 };
 `;
 
+  const maxRetries = 2;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -418,16 +400,21 @@ module.exports = async ({ page, context }) => {
       try { result = JSON.parse(text); } catch {}
       return { success: true, result };
     } catch (err: any) {
-      console.error('Browserless fetch error:', err);
-      return { success: false, error: err.message };
+      console.error(`Browserless attempt ${attempt + 1} failed:`, err);
+      if (attempt === maxRetries) {
+        return { success: false, error: `fetch failed after ${maxRetries + 1} attempts: ${err.message}` };
+      }
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // exponential backoff
     }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
-  })
+  }
+  return { success: false, error: 'Unexpected error' };
+}, {
+  body: t.Object({
+    url: t.String(),
+    loop: t.Optional(t.Boolean()),
+    intervalMs: t.Optional(t.Number()),
+  }),
+})
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
