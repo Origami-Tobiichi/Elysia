@@ -293,64 +293,76 @@ export const app = new Elysia()
   }))
   .post('/api/attack', async ({ body }) => {
     try {
-      let params: SingleAttackParams;
-      try {
-        params = JSON.parse(body as string);
-      } catch (e) {
-        return { success: false, error: 'Invalid JSON in request body', durationMs: 0 };
-      }
-      const result = await singleAttack(params);
+      const result = await singleAttack(body as SingleAttackParams);
       return result;
     } catch (err: any) {
       return { success: false, error: err.message, durationMs: 0 };
     }
   }, {
-    body: t.String(),
+    body: t.Object({
+      url: t.String(),
+      method: t.String(),
+      headers: t.Record(t.String(), t.String()),
+      body: t.String(),
+      timeout: t.Number(),
+      retryCount: t.Number(),
+      randomDelay: t.Number(),
+      keepAlive: t.Boolean(),
+      attackType: t.String(),
+      amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
+    }),
   })
   .post('/api/batch', async ({ body }) => {
     try {
-      let params: BatchAttackParams;
-      try {
-        params = JSON.parse(body as string);
-      } catch (e) {
-        return { success: false, error: 'Invalid JSON in request body' };
-      }
-      const result = await batchAttack(params);
+      const result = await batchAttack(body as BatchAttackParams);
       return result;
     } catch (err: any) {
       return { success: false, error: err.message };
     }
   }, {
-    body: t.String(),
+    body: t.Object({
+      url: t.String(),
+      method: t.String(),
+      headers: t.Record(t.String(), t.String()),
+      body: t.String(),
+      timeout: t.Number(),
+      retryCount: t.Number(),
+      randomDelay: t.Number(),
+      keepAlive: t.Boolean(),
+      attackType: t.String(),
+      amplifyKB: t.Number(),
+      amplifyEnabled: t.Boolean(),
+      amplifyType: t.String(),
+      concurrency: t.Number(),
+      total: t.Number(),
+    }),
   })
   .post('/api/autocannon', async ({ body }) => {
     try {
-      let params: AutocannonOptions;
-      try {
-        params = JSON.parse(body as string);
-      } catch (e) {
-        return { success: false, error: 'Invalid JSON in request body' };
-      }
-      const result = await runAutocannon(params);
+      const result = await runAutocannon(body as AutocannonOptions);
       return { success: true, result };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
   }, {
-    body: t.String(),
+    body: t.Object({
+      url: t.String(),
+      connections: t.Number(),
+      duration: t.Number(),
+      amount: t.Optional(t.Number()),
+      method: t.Optional(t.String()),
+      headers: t.Optional(t.Record(t.String(), t.String())),
+      body: t.Optional(t.String()),
+    }),
   })
   .post('/api/bot/browserless', async ({ body }) => {
-    try {
-      let params: { url: string; loop?: boolean; intervalMs?: number };
-      try {
-        params = JSON.parse(body as string);
-      } catch (e) {
-        return { success: false, error: 'Invalid JSON in request body' };
-      }
-      const { url, loop, intervalMs } = params;
-      const apiKey = process.env.BROWSERLESS_API_KEY;
-      if (!apiKey) return { success: false, error: 'Missing API key' };
+    const { url, loop, intervalMs } = body;
+    const apiKey = process.env.BROWSERLESS_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing API key' };
 
+    try {
       const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -370,7 +382,11 @@ export const app = new Elysia()
       return { success: false, error: err.message };
     }
   }, {
-    body: t.String(),
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+    }),
   })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
