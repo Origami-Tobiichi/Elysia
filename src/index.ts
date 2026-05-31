@@ -2,14 +2,15 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// Optimasi koneksi untuk Vercel
+// Konfigurasi koneksi pool
 const globalAgent = new Agent({
-  connections: 100,
+  connections: 200,
   pipelining: 1,
   keepAliveTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
 
+// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -69,6 +70,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
+  // Attack type modifications
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -243,7 +245,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
-// ==================== AUTOCANNON ATTACK (Baru) ====================
+// ==================== AUTOCANNON ====================
 interface AutocannonOptions {
   url: string;
   connections: number;
@@ -262,7 +264,7 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
         connections: Math.min(options.connections, 100),
         duration: Math.min(options.duration, 9),
         amount: options.amount ? Math.min(options.amount, 5000) : undefined,
-        method: (options.method || 'GET') as any, // cast to any untuk menghindari error type
+        method: (options.method || 'GET') as any,
         headers: options.headers,
         body: options.body,
         pipelining: 1,
@@ -287,8 +289,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - with Autocannon',
-    version: '3.0.0',
+    message: 'Web Stresser Ultimate - Elysia on Vercel',
+    version: '5.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
