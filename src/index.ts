@@ -350,11 +350,13 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
+  // ==================== PERBAIKAN BROWSERLESS ====================
   .post('/api/bot/browserless', async ({ body }) => {
     const { url } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing API key' };
 
+    // Kode JavaScript yang akan dijalankan di Browserless
     const code = `
       const page = await browser.newPage();
       await page.goto('${url}', { waitUntil: 'networkidle2', timeout: 30000 });
@@ -364,11 +366,11 @@ export const app = new Elysia()
     `;
 
     try {
-      const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
+      // Gunakan endpoint /function (bukan /content)
+      const response = await fetch(`https://chrome.browserless.io/function?token=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
-        redirect: 'manual',
       });
 
       if (!response.ok) {
@@ -377,7 +379,6 @@ export const app = new Elysia()
       }
 
       const result = await response.json();
-      if (result.error) return { success: false, error: result.error };
       return { success: true, result };
     } catch (err: any) {
       return { success: false, error: err.message };
