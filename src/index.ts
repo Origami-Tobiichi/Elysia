@@ -351,45 +351,50 @@ export const app = new Elysia()
     }),
   })
   // ==================== PERBAIKAN BROWSERLESS ====================
-  .post('/api/bot/browserless', async ({ body }) => {
-    const { url } = body;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+  // ... bagian lain tidak berubah
 
-    // Kode JavaScript yang akan dijalankan di Browserless
-    const code = `
-      const page = await browser.newPage();
-      await page.goto('${url}', { waitUntil: 'networkidle2', timeout: 30000 });
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(2000);
-      await page.close();
-    `;
+.post('/api/bot/browserless', async ({ body }) => {
+  const { url } = body;
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    try {
-      // Gunakan endpoint /function (bukan /content)
-      const response = await fetch(`https://chrome.browserless.io/function?token=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        return { success: false, error: `Browserless API error (${response.status}): ${errorText.substring(0, 200)}` };
-      }
-
-      const result = await response.json();
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+  // Format kode yang benar untuk Browserless /function
+  const code = `
+    async ({ page, browser }) => {
+      const newPage = await browser.newPage();
+      await newPage.goto('${url}', { waitUntil: 'networkidle2', timeout: 30000 });
+      await newPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await newPage.waitForTimeout(2000);
+      await newPage.close();
     }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
-  })
+  `;
+
+  try {
+    const response = await fetch(`https://chrome.browserless.io/function?token=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      return { success: false, error: `Browserless API error (${response.status}): ${errorText.substring(0, 200)}` };
+    }
+
+    const result = await response.json();
+    return { success: true, result };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}, {
+  body: t.Object({
+    url: t.String(),
+    loop: t.Optional(t.Boolean()),
+    intervalMs: t.Optional(t.Number()),
+  }),
+})
+
+// ... sisanya sama
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
