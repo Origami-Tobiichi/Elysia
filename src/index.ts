@@ -357,7 +357,7 @@ export const app = new Elysia()
 
     try {
       const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
-        method: 'POST',
+        method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code: `
