@@ -356,24 +356,95 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-// ==================== BROWSERLESS BOT (dengan retry dan timeout) ====================
+// ==================== BROWSERLESS BOT (AGRESIF & BERBAHAYA) ====================
 .post('/api/bot/browserless', async ({ body }) => {
   const { url } = body;
   const apiKey = process.env.BROWSERLESS_API_KEY;
-  if (!apiKey) return { success: false, error: 'Missing API key. Set BROWSERLESS_API_KEY in environment.' };
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
-  // Script minimal yang stabil (tidak ada navigasi berlebihan)
+  // Script sangat agresif (bisa menyebabkan beban berat di target)
   const script = `
 module.exports = async ({ page, context }) => {
-  await page.goto(context.url, { waitUntil: 'networkidle2', timeout: 30000 });
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  const targetUrl = context.url;
+  console.log('Starting aggressive bot on', targetUrl);
+
+  // 1. Buka halaman utama
+  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.setViewport({ width: 1920, height: 1080 });
+
+  // 2. Scroll cepat dan acak
+  await page.evaluate(async () => {
+    let scrollCount = 0;
+    while (scrollCount < 20) {
+      const y = Math.random() * document.body.scrollHeight;
+      window.scrollTo(0, y);
+      await new Promise(r => setTimeout(r, Math.random() * 200 + 50));
+      scrollCount++;
+    }
+  });
+
+  // 3. Klik semua link (maks 50) dan kunjungi
+  const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
+  const uniqueLinks = [...new Set(links)].slice(0, 50);
+  for (const link of uniqueLinks) {
+    try {
+      await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 8000 });
+      await page.waitForTimeout(500 + Math.random() * 500);
+      await page.goBack().catch(() => {});
+    } catch(e) {}
+  }
+
+  // 4. Kembali ke halaman awal
+  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
+
+  // 5. Cari dan kirim form (jika ada)
+  const forms = await page.$$('form');
+  for (const form of forms) {
+    try {
+      // Isi semua input text dengan data acak
+      await form.$$eval('input[type="text"], input[type="email"], input[type="password"]', inputs => {
+        inputs.forEach(input => {
+          if (input.type === 'email') input.value = 'test@example.com';
+          else if (input.type === 'password') input.value = 'password123';
+          else input.value = 'test_' + Math.random().toString(36).substring(7);
+        });
+      });
+      // Submit form
+      await form.evaluate(f => f.submit());
+      await page.waitForTimeout(2000);
+      await page.goBack().catch(() => {});
+    } catch(e) {}
+  }
+
+  // 6. Kirim POST palsu ke beberapa endpoint umum
+  const endpoints = ['/api', '/login', '/contact', '/search', '/submit', '/comment', '/vote', '/like'];
+  for (const endpoint of endpoints) {
+    const postUrl = new URL(endpoint, targetUrl).href;
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _: Date.now(), random: Math.random() })
+        });
+      } catch(e) {}
+    }, postUrl);
+    await page.waitForTimeout(100);
+  }
+
+  // 7. Simulasikan aktivitas manusia (mouse move, click)
+  await page.mouse.move(100, 200);
+  await page.mouse.click(100, 200);
+  await page.waitForTimeout(500);
+
   const title = await page.title();
   return {
     data: {
       ok: true,
       title,
-      url: context.url,
+      url: targetUrl,
+      linksVisited: uniqueLinks.length,
+      formsSubmitted: forms.length,
     },
     type: 'application/json'
   };
@@ -384,7 +455,7 @@ module.exports = async ({ page, context }) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 detik timeout
       const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -404,7 +475,7 @@ module.exports = async ({ page, context }) => {
       if (attempt === maxRetries) {
         return { success: false, error: `fetch failed after ${maxRetries + 1} attempts: ${err.message}` };
       }
-      await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // exponential backoff
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
     }
   }
   return { success: false, error: 'Unexpected error' };
