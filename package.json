@@ -1,14 +1,19 @@
 {
-  "name": "loadtest-web",
-  "version": "1.0.0",
-  "description": "Ultimate Load Testing Tool",
+  "name": "web-stresser-ultimate",
+  "version": "5.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "node api/attack.js",
-    "start": "node api/attack.js"
+    "build": "tsc",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "autocannon": "^7.15.0",
-    "cors": "^2.8.5"
+    "elysia": "^1.1.0",
+    "undici": "^6.11.1",
+    "autocannon": "^7.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "@types/node": "^20.11.30",
+    "@types/autocannon": "^7.14.2"
   }
 }
