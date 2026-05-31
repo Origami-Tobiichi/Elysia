@@ -2,7 +2,6 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// Konfigurasi koneksi pool
 const globalAgent = new Agent({
   connections: 200,
   pipelining: 1,
@@ -10,7 +9,6 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
-// Active users counter
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -19,7 +17,6 @@ setInterval(() => {
   }
 }, 30000);
 
-// Helper functions
 function randomString(n: number): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -34,7 +31,6 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return randomString(size);
 }
 
-// ==================== SINGLE ATTACK ====================
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -169,7 +165,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
-// ==================== BATCH ATTACK ====================
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -244,7 +239,6 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
-// ==================== AUTOCANNON ====================
 interface AutocannonOptions {
   url: string;
   connections: number;
@@ -278,7 +272,6 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
   });
 }
 
-// ==================== ELYSIA APP ====================
 export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
@@ -357,7 +350,6 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // Endpoint browserless - menggunakan t.Object (bukan t.String)
   .post('/api/bot/browserless', async ({ body }) => {
     const { url, loop, intervalMs } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
