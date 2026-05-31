@@ -2,13 +2,20 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
-// Konfigurasi koneksi pool yang aman untuk Vercel (tanpa nilai 0 atau Infinity)
+// Agent global yang aman (keepAliveTimeout > 0)
 const globalAgent = new Agent({
-  connections: 100,
+  connections: 256,
   pipelining: 1,
-  keepAliveTimeout: 60000, // 60 detik, bukan 0
+  keepAliveTimeout: 60000,
 });
 setGlobalDispatcher(globalAgent);
+
+// Agent khusus untuk Browserless (lebih ringan)
+const browserlessAgent = new Agent({
+  connections: 10,
+  keepAliveTimeout: 30000,
+  pipelining: 1,
+});
 
 const activeUsers = new Map<string, number>();
 setInterval(() => {
@@ -359,17 +366,16 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-// ==================== BROWSERLESS BOT (PERBAIKAN FINAL) ====================
-.post('/api/bot/browserless', async ({ body }) => {
-  const { url } = body;
-  const apiKey = process.env.BROWSERLESS_API_KEY;
-  if (!apiKey) return { success: false, error: 'Missing API key' };
+  // ==================== BROWSERLESS BOT (perbaikan keepAliveTimeout) ====================
+  .post('/api/bot/browserless', async ({ body }) => {
+    const { url } = body;
+    const apiKey = process.env.BROWSERLESS_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing API key' };
 
-  // Format script yang benar untuk Browserless /function
-  const script = `
+    // Script yang benar (module.exports)
+    const script = `
 module.exports = async ({ page, context }) => {
-  const targetUrl = context.url;
-  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+  await page.goto(context.url, { waitUntil: 'networkidle2', timeout: 30000 });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await new Promise(resolve => setTimeout(resolve, 2000));
   const title = await page.title();
@@ -377,41 +383,49 @@ module.exports = async ({ page, context }) => {
     data: {
       ok: true,
       title,
-      url: targetUrl,
+      url: context.url,
     },
     type: 'application/json'
   };
 };
 `;
 
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-    const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: script, context: { url } }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const text = await response.text();
-    if (!response.ok) {
-      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000);
+        const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: script, context: { url } }),
+          signal: controller.signal,
+          dispatcher: browserlessAgent, // gunakan agent khusus
+        });
+        clearTimeout(timeoutId);
+        const text = await response.text();
+        if (!response.ok) {
+          return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+        }
+        let result: unknown = text;
+        try { result = JSON.parse(text); } catch {}
+        return { success: true, result };
+      } catch (err: any) {
+        console.error(`Browserless attempt ${attempt + 1} failed:`, err);
+        if (attempt === maxRetries) {
+          return { success: false, error: `fetch failed: ${err.message}` };
+        }
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      }
     }
-    let result: unknown = text;
-    try { result = JSON.parse(text); } catch {}
-    return { success: true, result };
-  } catch (err: any) {
-    console.error('Browserless fetch error:', err);
-    return { success: false, error: err.message };
-  }
-}, {
-  body: t.Object({
-    url: t.String(),
-    loop: t.Optional(t.Boolean()),
-    intervalMs: t.Optional(t.Number()),
-  }),
-})
+    return { success: false, error: 'Unexpected error' };
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+    }),
+  })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
