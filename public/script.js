@@ -396,6 +396,7 @@ async function runAutocannonAttack() {
     }
 }
 
+// (Potongan yang relevan dari script.js, hanya bagian runBrowserlessBot)
 async function runBrowserlessBot() {
     if (isRunning) { addLog("Another attack is running! Stop it first.", true); return; }
     let url = targetUrl.value.trim();
