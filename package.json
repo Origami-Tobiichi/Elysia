@@ -1,5 +1,5 @@
 {
-  "name": "web-stresser-ultimate",
+  "name": "web-stresser-elysia",
   "version": "5.0.0",
   "type": "module",
   "scripts": {
@@ -7,13 +7,14 @@
     "vercel-build": "npm run build"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^148.0.0",
     "elysia": "^1.1.0",
     "undici": "^6.11.1",
-    "autocannon": "^7.15.0"
+    "autocannon": "^8.0.0"
   },
   "devDependencies": {
     "typescript": "^5.4.2",
     "@types/node": "^20.11.30",
-    "@types/autocannon": "^7.14.2"
+    "@types/autocannon": "^7.12.7"
   }
 }
