@@ -359,58 +359,59 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // ==================== BROWSERLESS BOT (ringan untuk Vercel) ====================
-  .post('/api/bot/browserless', async ({ body }) => {
-    const { url } = body;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+// ==================== BROWSERLESS BOT (PERBAIKAN FINAL) ====================
+.post('/api/bot/browserless', async ({ body }) => {
+  const { url } = body;
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    // Script minimal (hanya buka halaman dan scroll sedikit)
-    const script = `
+  // Format script yang benar untuk Browserless /function
+  const script = `
 module.exports = async ({ page, context }) => {
-  await page.goto(context.url, { waitUntil: 'networkidle2', timeout: 15000 });
+  const targetUrl = context.url;
+  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 2000));
   const title = await page.title();
-  return { data: { ok: true, title, url: context.url }, type: 'application/json' };
+  return {
+    data: {
+      ok: true,
+      title,
+      url: targetUrl,
+    },
+    type: 'application/json'
+  };
 };
 `;
 
-    const maxRetries = 1;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 9000); // 9 detik
-        const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: script, context: { url } }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
-        const text = await response.text();
-        if (!response.ok) {
-          return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
-        }
-        let result: unknown = text;
-        try { result = JSON.parse(text); } catch {}
-        return { success: true, result };
-      } catch (err: any) {
-        console.error(`Browserless attempt ${attempt + 1} failed:`, err);
-        if (attempt === maxRetries) {
-          return { success: false, error: `fetch failed: ${err.message}` };
-        }
-        await new Promise(r => setTimeout(r, 1000));
-      }
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: script, context: { url } }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const text = await response.text();
+    if (!response.ok) {
+      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
     }
-    return { success: false, error: 'Unexpected error' };
-  }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
-  })
+    let result: unknown = text;
+    try { result = JSON.parse(text); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    console.error('Browserless fetch error:', err);
+    return { success: false, error: err.message };
+  }
+}, {
+  body: t.Object({
+    url: t.String(),
+    loop: t.Optional(t.Boolean()),
+    intervalMs: t.Optional(t.Number()),
+  }),
+})
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
