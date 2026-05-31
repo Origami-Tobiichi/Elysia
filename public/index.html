@@ -29,7 +29,7 @@
     <div class="flex justify-between items-center mb-6">
         <div>
             <h1 class="text-5xl font-black bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">💀 STRESSER ULTIMATE 5.0</h1>
-            <p class="text-gray-400">Elysia · Vercel · Autocannon · Unlimited Mode</p>
+            <p class="text-gray-400">Elysia · Vercel · Autocannon · Unlimited Mode · Browserless Bot</p>
         </div>
         <div class="flex items-center gap-3 bg-black/40 p-2 rounded-full">
             <i class="fas fa-users text-orange-400"></i>
@@ -55,7 +55,13 @@
                 <div><label>⏱️ Timeout (ms)</label><input type="number" id="timeout" value="5000" class="w-full p-2 rounded bg-black"></div>
                 <div><label>🎲 Random Delay (ms)</label><input type="number" id="randomDelay" value="0" class="w-full p-2 rounded bg-black"></div>
             </div>
-            <div><label><input type="checkbox" id="unlimitedMode"> 🔁 Unlimited Mode (loop infinite)</label></div>
+            <div class="flex items-center justify-between">
+                <label><input type="checkbox" id="unlimitedMode"> 🔁 Unlimited Mode (loop infinite)</label>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs">Interval (ms):</span>
+                    <input type="number" id="intervalMs" value="5000" class="w-24 p-1 rounded bg-black text-sm">
+                </div>
+            </div>
             <div>
                 <div class="flex justify-between"><span>📈 Amplification</span><label><input type="checkbox" id="amplifyToggle"> Enable</label></div>
                 <div id="amplifyControls" style="display:none;">
@@ -73,6 +79,7 @@
                 <button id="stopBtn" class="bg-gray-800 flex-1 py-2 rounded disabled:opacity-50" disabled>STOP</button>
             </div>
             <button id="autocannonBtn" class="btn-primary w-full py-2 rounded font-bold">AUTOCANNON</button>
+            <button id="browserlessBtn" class="btn-primary w-full py-2 rounded font-bold mt-2"><i class="fab fa-chrome"></i> BROWSERLESS BOT</button>
             <button id="exportBtn" class="w-full bg-blue-900/60 py-2 rounded text-sm">Export CSV</button>
             <div class="text-xs text-center text-gray-400 border-t border-gray-800 pt-3">⚠️ Serangan nyata dari IP Vercel. Hanya untuk server sendiri.</div>
         </div>
