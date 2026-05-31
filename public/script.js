@@ -474,10 +474,7 @@ async function runBrowserlessBot() {
     
     addLog(`🤖 Memulai Browserless bot ke ${url} (loop: ${loop}, interval: ${interval}ms)`);
     isRunning = true;
-    startBtn.disabled = true;
-    batchBtn.disabled = true;
-    autocannonBtn.disabled = true;
-    if (browserlessBtn) browserlessBtn.disabled = true;
+    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = true;
     stopBtn.disabled = false;
     
     const callBot = async () => {
@@ -490,13 +487,25 @@ async function runBrowserlessBot() {
             const data = await res.json();
             if (data.success) {
                 addLog(`✅ Browserless bot mengunjungi ${url} berhasil`);
+                // Tampilkan raw response dari browserless
+                if (data.result) {
+                    // Coba ambil data dari properti 'data' jika ada
+                    let displayData = data.result;
+                    if (data.result.data) displayData = data.result.data;
+                    const prettyResult = typeof displayData === 'object' ? JSON.stringify(displayData, null, 2) : displayData;
+                    rawResponsePreview.innerText = prettyResult.substring(0, 500);
+                } else {
+                    rawResponsePreview.innerText = 'Success (no additional data)';
+                }
                 return true;
             } else {
                 addLog(`❌ Bot error: ${data.error}`, true);
+                rawResponsePreview.innerText = `Error: ${data.error}`;
                 return false;
             }
         } catch (err) {
             addLog(`❌ Bot request gagal: ${err.message}`, true);
+            rawResponsePreview.innerText = `Request failed: ${err.message}`;
             return false;
         }
     };
@@ -516,10 +525,7 @@ async function runBrowserlessBot() {
     }
     
     isRunning = false;
-    startBtn.disabled = false;
-    batchBtn.disabled = false;
-    autocannonBtn.disabled = false;
-    if (browserlessBtn) browserlessBtn.disabled = false;
+    startBtn.disabled = batchBtn.disabled = autocannonBtn.disabled = browserlessBtn.disabled = false;
     stopBtn.disabled = true;
 }
 
