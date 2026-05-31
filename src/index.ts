@@ -351,13 +351,10 @@ export const app = new Elysia()
     }),
   })
   // ==================== PERBAIKAN BROWSERLESS ====================
- .post('/api/bot/browserless', async ({ body }) => {
+.post('/api/bot/browserless', async ({ body }) => {
   const { url } = body;
   const apiKey = process.env.BROWSERLESS_API_KEY;
-
-  if (!apiKey) {
-    return { success: false, error: 'Missing API key' };
-  }
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
   const script = `
 export default async ({ page, context }) => {
@@ -365,15 +362,11 @@ export default async ({ page, context }) => {
     waitUntil: 'domcontentloaded',
     timeout: 30000
   });
-
   await page.evaluate(() => {
     window.scrollTo(0, document.body.scrollHeight);
   });
-
   await new Promise((r) => setTimeout(r, 2000));
-
   const title = await page.title();
-
   return {
     data: {
       ok: true,
@@ -386,32 +379,18 @@ export default async ({ page, context }) => {
 `;
 
   try {
-    const response = await fetch(
-      \`https://production-sfo.browserless.io/function?token=\${apiKey}\`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: script,
-          context: { url }
-        }),
-      }
-    );
-
+    // Gunakan string concatenation biasa, bukan template literal
+    const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: script, context: { url } })
+    });
     const text = await response.text();
-
     if (!response.ok) {
-      return {
-        success: false,
-        error: \`Browserless API error (\${response.status}): \${text.slice(0, 500)}\`,
-      };
+      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
     }
-
     let result: unknown = text;
-    try {
-      result = JSON.parse(text);
-    } catch {}
-
+    try { result = JSON.parse(text); } catch {}
     return { success: true, result };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -423,6 +402,7 @@ export default async ({ page, context }) => {
     intervalMs: t.Optional(t.Number()),
   }),
 })
+  
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
