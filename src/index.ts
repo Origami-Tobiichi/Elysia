@@ -10,13 +10,6 @@ const globalAgent = new Agent({
 });
 setGlobalDispatcher(globalAgent);
 
-// Agent khusus untuk Browserless (lebih ringan)
-const browserlessAgent = new Agent({
-  connections: 10,
-  keepAliveTimeout: 30000,
-  pipelining: 1,
-});
-
 const activeUsers = new Map<string, number>();
 setInterval(() => {
   const now = Date.now();
@@ -128,7 +121,6 @@ async function singleAttack(params: SingleAttackParams): Promise<any> {
     headers: finalHeaders,
     signal: AbortSignal.timeout(timeout),
     redirect: 'manual',
-    dispatcher: globalAgent,
   };
   if (useBody && (finalMethod === 'POST' || finalMethod === 'PUT' || finalMethod === 'PATCH')) {
     fetchOptions.body = finalBody;
@@ -366,7 +358,7 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  // ==================== BROWSERLESS BOT (perbaikan keepAliveTimeout) ====================
+  // ==================== BROWSERLESS BOT (perbaikan final) ====================
   .post('/api/bot/browserless', async ({ body }) => {
     const { url } = body;
     const apiKey = process.env.BROWSERLESS_API_KEY;
@@ -400,7 +392,6 @@ module.exports = async ({ page, context }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code: script, context: { url } }),
           signal: controller.signal,
-          dispatcher: browserlessAgent, // gunakan agent khusus
         });
         clearTimeout(timeoutId);
         const text = await response.text();
