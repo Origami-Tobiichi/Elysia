@@ -358,6 +358,36 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
+  // Endpoint browser bot menggunakan Browserless.io
+  .post('/api/bot/browserless', async ({ body }) => {
+    const { url, loop, intervalMs } = body as any;
+    const apiKey = process.env.BROWSERLESS_API_KEY;
+    if (!apiKey) return { success: false, error: 'Missing API key' };
+
+    // Untuk loop, frontend perlu memanggil endpoint ini berulang kali.
+    // Kita hanya melakukan satu tindakan per panggilan.
+    const response = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: `
+          const page = await browser.newPage();
+          await page.goto('${url}', { waitUntil: 'networkidle2' });
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await page.waitForTimeout(2000);
+          await page.close();
+        `,
+      }),
+    });
+    const result = await response.json();
+    return { success: true, result };
+  }, {
+    body: t.Object({
+      url: t.String(),
+      loop: t.Optional(t.Boolean()),
+      intervalMs: t.Optional(t.Number()),
+    }),
+  })
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
