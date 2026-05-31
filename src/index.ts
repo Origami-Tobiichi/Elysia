@@ -355,50 +355,69 @@ export const app = new Elysia()
       body: t.Optional(t.String()),
     }),
   })
-  .post('/api/bot/browserless', async ({ body }) => {
-    const { url } = body;
-    const apiKey = process.env.BROWSERLESS_API_KEY;
-    if (!apiKey) return { success: false, error: 'Missing API key' };
+// ==================== BROWSERLESS BOT YANG DITINGKATKAN ====================
+.post('/api/bot/browserless', async ({ body }) => {
+  const { url, loop, intervalMs } = body;
+  const apiKey = process.env.BROWSERLESS_API_KEY;
+  if (!apiKey) return { success: false, error: 'Missing API key' };
 
-    // Script Browserless yang lebih sederhana dan stabil (tanpa manipulasi form yang error)
-    const script = `
-export default async ({ page, context }) => {
+  // Script yang lebih agresif dan stabil (menggunakan module.exports)
+  const script = `
+module.exports = async ({ page, context }) => {
   const targetUrl = context.url;
+  const { extraHeaders = {}, randomDelay = 1000 } = context;
+
+  // Set extra headers jika ada
+  if (Object.keys(extraHeaders).length) {
+    await page.setExtraHTTPHeaders(extraHeaders);
+  }
+
+  // Buka halaman utama
   await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-  // 1. Scroll perlahan
+  // 1. Scroll cepat ke bawah dan atas (simulasi manusia)
   await page.evaluate(async () => {
     let totalHeight = 0;
     let distance = 500;
     while (totalHeight < document.body.scrollHeight) {
       window.scrollBy(0, distance);
       totalHeight += distance;
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
+    await new Promise(resolve => setTimeout(resolve, 500));
+    window.scrollTo(0, 0);
   });
 
-  // 2. Kunjungi beberapa link unik (maks 10)
+  // 2. Klik 10 link random (bukan semua, agar tidak timeout)
   const links = await page.$$eval('a', anchors => anchors.map(a => a.href).filter(h => h && h.startsWith('http')));
   const uniqueLinks = [...new Set(links)].slice(0, 10);
   for (const link of uniqueLinks) {
     await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
-    await page.goBack();
+    await page.goBack().catch(() => {});
+    await page.waitForTimeout(300);
   }
 
   // 3. Kembali ke halaman awal
   await page.goto(targetUrl, { waitUntil: 'networkidle2' });
 
-  // 4. Kirim POST ke beberapa endpoint umum
-  const commonEndpoints = ['/api', '/login', '/submit', '/contact', '/search'];
-  for (const endpoint of commonEndpoints) {
-    const postUrl = new URL(endpoint, targetUrl).href;
+  // 4. Kirim POST request ke beberapa endpoint umum (menggunakan fetch di browser)
+  const endpoints = ['/api', '/login', '/submit', '/contact', '/search', '/comment', '/upload'];
+  for (const endpoint of endpoints) {
+    const fullUrl = new URL(endpoint, targetUrl).href;
     await page.evaluate(async (url) => {
       try {
-        await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test: true }) });
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timestamp: Date.now(), random: Math.random() })
+        });
       } catch(e) {}
-    }, postUrl);
+    }, fullUrl);
   }
+
+  // 5. Tunggu sebentar
+  await page.waitForTimeout(2000);
 
   const title = await page.title();
   return {
@@ -406,36 +425,50 @@ export default async ({ page, context }) => {
       ok: true,
       title,
       url: targetUrl,
-      linksFound: links.length,
+      linksClicked: uniqueLinks.length,
+      endpointsHit: endpoints.length,
     },
     type: 'application/json'
   };
-}
+};
 `;
 
-    try {
-      const response = await fetch('https://production-sfo.browserless.io/function?token=' + apiKey, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: script, context: { url } })
-      });
-      const text = await response.text();
-      if (!response.ok) {
-        return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
-      }
-      let result: unknown = text;
-      try { result = JSON.parse(text); } catch {}
-      return { success: true, result };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 detik timeout
+    // Kirim extraHeaders dan randomDelay dari frontend (bisa dikirim via body)
+    const response = await fetch('https://chrome.browserless.io/function?token=' + apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code: script,
+        context: {
+          url,
+          extraHeaders: parseHeaders() || {},
+          randomDelay: 1000
+        }
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const text = await response.text();
+    if (!response.ok) {
+      return { success: false, error: `Browserless API error (${response.status}): ${text.slice(0, 500)}` };
     }
-  }, {
-    body: t.Object({
-      url: t.String(),
-      loop: t.Optional(t.Boolean()),
-      intervalMs: t.Optional(t.Number()),
-    }),
-  })
+    let result: unknown = text;
+    try { result = JSON.parse(text); } catch {}
+    return { success: true, result };
+  } catch (err: any) {
+    console.error('Browserless fetch error:', err);
+    return { success: false, error: err.message };
+  }
+}, {
+  body: t.Object({
+    url: t.String(),
+    loop: t.Optional(t.Boolean()),
+    intervalMs: t.Optional(t.Number()),
+  }),
+})
   .get('/api/heartbeat', ({ request }) => {
     const ip = request.headers.get('x-forwarded-for') || 'unknown';
     const ua = request.headers.get('user-agent') || 'unknown';
